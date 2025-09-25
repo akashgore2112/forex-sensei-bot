@@ -1,6 +1,5 @@
 const WebSocket = require("ws");
 
-// TradingView WebSocket endpoint
 const socket = new WebSocket("wss://data.tradingview.com/socket.io/websocket", {
   origin: "https://www.tradingview.com",
 });
@@ -8,21 +7,22 @@ const socket = new WebSocket("wss://data.tradingview.com/socket.io/websocket", {
 socket.on("open", () => {
   console.log("✅ Connected to TradingView WebSocket");
 
-  // Example: EURUSD subscribe
   const chartSession = "cs_" + Math.random().toString(36).substring(2, 15);
   const quoteSession = "qs_" + Math.random().toString(36).substring(2, 15);
 
-  // send helper
   const sendMessage = (msg) => {
     socket.send(`~m~${msg.length}~m~${msg}`);
+    console.log("➡️ Sent:", msg); // DEBUG LOG
   };
 
-  // chart + quote init
+  // Authentication
   sendMessage(JSON.stringify({ m: "set_auth_token", p: ["unauthorized_user_token"] }));
+
+  // Create sessions
   sendMessage(JSON.stringify({ m: "chart_create_session", p: [chartSession, ""] }));
   sendMessage(JSON.stringify({ m: "quote_create_session", p: [quoteSession] }));
 
-  // Add EURUSD to quote session
+  // Add EURUSD symbol
   sendMessage(
     JSON.stringify({
       m: "quote_add_symbols",
@@ -30,14 +30,19 @@ socket.on("open", () => {
     })
   );
 
-  // Subscribe to 1m candles
+  // Resolve symbol for chart session
   sendMessage(
     JSON.stringify({
       m: "resolve_symbol",
-      p: [chartSession, "symbol_1", "={\"symbol\":\"FX_IDC:EURUSD\",\"adjustment\":\"splits\"}"],
+      p: [
+        chartSession,
+        "symbol_1",
+        '{"symbol":"FX_IDC:EURUSD","adjustment":"splits","session":"regular"}',
+      ],
     })
   );
 
+  // Subscribe candles (1m)
   sendMessage(
     JSON.stringify({
       m: "create_series",
@@ -46,7 +51,7 @@ socket.on("open", () => {
   );
 });
 
-// Parser for TradingView messages
+// Parse TradingView protocol messages
 function parseMessage(message) {
   let parts = message.toString().split("~m~");
   for (let i = 1; i < parts.length; i += 2) {
@@ -54,13 +59,14 @@ function parseMessage(message) {
       const data = JSON.parse(parts[i + 1]);
       handleData(data);
     } catch (err) {
-      // Ignore keepalive pings or non-JSON
+      // Ignore keepalive or garbage packets
     }
   }
 }
 
-// Handle parsed data
 function handleData(data) {
+  console.log("⬅️ Raw Response:", JSON.stringify(data)); // DEBUG LOG
+
   if (data.m === "timescale_update") {
     const candles = data.p[1].s1;
     if (candles) {
