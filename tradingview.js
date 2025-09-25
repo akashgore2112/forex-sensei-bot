@@ -1,75 +1,64 @@
 const WebSocket = require("ws");
 
-// TradingView WebSocket URL
+// TradingView WebSocket server
 const socket = new WebSocket("wss://data.tradingview.com/socket.io/websocket", {
   origin: "https://www.tradingview.com",
 });
 
-function sendMessage(msg) {
-  console.log(">>", msg);
-  socket.send(msg);
-}
-
 socket.on("open", () => {
   console.log("✅ Connected to TradingView WebSocket");
 
-  // Create sessions
-  const quoteSession = "qs_" + Math.random().toString(36).substring(2, 12);
-  const chartSession = "cs_" + Math.random().toString(36).substring(2, 12);
+  // Session create
+  const session = "qs_" + Math.random().toString(36).substring(2, 12);
 
-  // -------------------
-  // Auth (guest user)
-  sendMessage(JSON.stringify({ m: "set_auth_token", p: ["unauthorized_user_token"] }));
+  // Send function
+  const send = (msg) => {
+    socket.send(JSON.stringify(msg));
+  };
 
-  // Quote session
-  sendMessage(JSON.stringify({ m: "quote_create_session", p: [quoteSession] }));
+  // Create quote session
+  send({ m: "quote_create_session", p: [session] });
 
-  // Add symbol (FIXED → FX:EURUSD instead of FX_IDC)
-  sendMessage(
-    JSON.stringify({
+  // Add multiple symbols here
+  const symbols = ["FX:EURUSD", "FX:GBPUSD", "OANDA:XAUUSD"];
+
+  symbols.forEach((symbol) => {
+    send({
       m: "quote_add_symbols",
-      p: [quoteSession, "FX:EURUSD", { flags: ["force_permission"] }],
-    })
-  );
+      p: [session, symbol, { flags: ["force_permission"] }],
+    });
 
-  // Chart session
-  sendMessage(JSON.stringify({ m: "chart_create_session", p: [chartSession] }));
+    // Request data updates
+    send({
+      m: "quote_set_fields",
+      p: [session, "lp", "volume", "bid", "ask", "change", "description"],
+    });
+  });
 
-  // Resolve symbol
-  sendMessage(
-    JSON.stringify({
-      m: "resolve_symbol",
-      p: [
-        chartSession,
-        "symbol_1",
-        '{"symbol":"FX:EURUSD","adjustment":"splits","session":"regular"}',
-      ],
-    })
-  );
-
-  // Subscribe candles (1-minute)
-  sendMessage(
-    JSON.stringify({
-      m: "create_series",
-      p: [chartSession, "s1", "s1", "symbol_1", "1", 300],
-    })
-  );
-
-  // -------------------
-  // Test keep-alive ping
+  // Heartbeat (TradingView ko connection alive dikhane ke liye)
   setInterval(() => {
     if (socket.readyState === WebSocket.OPEN) {
       socket.send("~h~" + Date.now());
+      console.log("💓 Heartbeat sent");
     }
   }, 10000);
 });
 
-socket.on("message", (msg) => {
-  if (msg.includes("timescale_update")) {
-    console.log("📊 Price Update:", msg);
+socket.on("message", (data) => {
+  try {
+    const msg = JSON.parse(data);
+    if (msg.m === "quote_update") {
+      console.log("📊 Live Update:", msg.p);
+    }
+  } catch (err) {
+    // Ignore non-JSON messages
   }
 });
 
 socket.on("close", () => {
   console.log("❌ Disconnected from TradingView WebSocket");
+});
+
+socket.on("error", (err) => {
+  console.error("⚠️ Error:", err);
 });
