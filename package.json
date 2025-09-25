@@ -1,0 +1,12 @@
+{
+  "name": "forex-sensei-bot",
+  "version": "1.0.0",
+  "description": "An AI-powered Forex trading assistant Telegram bot with daily signals, Q&A, and learning dojo.",
+  "main": "bot.js",
+  "scripts": {
+    "start": "node bot.js"
+  },
+  "dependencies": {
+    "telegraf": "^4.12.2"
+  }
+}
