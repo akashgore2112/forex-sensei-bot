@@ -1,53 +1,86 @@
 const WebSocket = require("ws");
 
-const SOCKET_URL = "wss://data.tradingview.com/socket.io/websocket";
-const SYMBOL = "FX:EURUSD";
-
-// WebSocket client
-const ws = new WebSocket(SOCKET_URL, {
+// TradingView WebSocket endpoint
+const socket = new WebSocket("wss://data.tradingview.com/socket.io/websocket", {
   origin: "https://www.tradingview.com",
 });
 
-function parseMessage(raw) {
-  // TradingView messages "~m~" se wrapped hote hain → isko remove karna hai
-  const regex = /~m~\d+~m~(.*)/;
-  const match = raw.toString().match(regex);
-  if (match && match[1]) {
-    try {
-      return JSON.parse(match[1]);
-    } catch {
-      return null;
-    }
-  }
-  return null;
-}
-
-ws.on("open", () => {
+socket.on("open", () => {
   console.log("✅ Connected to TradingView WebSocket");
 
-  const session = "qs_" + Math.random().toString(36).substring(2, 12);
+  // Example: EURUSD subscribe
+  const chartSession = "cs_" + Math.random().toString(36).substring(2, 15);
+  const quoteSession = "qs_" + Math.random().toString(36).substring(2, 15);
 
-  ws.send(JSON.stringify(["set_auth_token", "unauthorized_user_token"]));
-  ws.send(JSON.stringify(["chart_create_session", session]));
-  ws.send(JSON.stringify(["resolve_symbol", session, "s1", SYMBOL]));
-  ws.send(
-    JSON.stringify([
-      "create_series",
-      session,
-      "s1",
-      "s1",
-      "1",
-      300, // timeframe (5 min candles)
-    ])
+  // send helper
+  const sendMessage = (msg) => {
+    socket.send(`~m~${msg.length}~m~${msg}`);
+  };
+
+  // chart + quote init
+  sendMessage(JSON.stringify({ m: "set_auth_token", p: ["unauthorized_user_token"] }));
+  sendMessage(JSON.stringify({ m: "chart_create_session", p: [chartSession, ""] }));
+  sendMessage(JSON.stringify({ m: "quote_create_session", p: [quoteSession] }));
+
+  // Add EURUSD to quote session
+  sendMessage(
+    JSON.stringify({
+      m: "quote_add_symbols",
+      p: [quoteSession, "FX_IDC:EURUSD", { flags: ["force_permission"] }],
+    })
+  );
+
+  // Subscribe to 1m candles
+  sendMessage(
+    JSON.stringify({
+      m: "resolve_symbol",
+      p: [chartSession, "symbol_1", "={\"symbol\":\"FX_IDC:EURUSD\",\"adjustment\":\"splits\"}"],
+    })
+  );
+
+  sendMessage(
+    JSON.stringify({
+      m: "create_series",
+      p: [chartSession, "s1", "s1", "symbol_1", "1", 300],
+    })
   );
 });
 
-ws.on("message", (data) => {
-  const msg = parseMessage(data);
-  if (msg && msg[0] === "timescale_update") {
-    console.log("📊 New Candle Data:", JSON.stringify(msg[1], null, 2));
+// Parser for TradingView messages
+function parseMessage(message) {
+  let parts = message.toString().split("~m~");
+  for (let i = 1; i < parts.length; i += 2) {
+    try {
+      const data = JSON.parse(parts[i + 1]);
+      handleData(data);
+    } catch (err) {
+      // Ignore keepalive pings or non-JSON
+    }
   }
+}
+
+// Handle parsed data
+function handleData(data) {
+  if (data.m === "timescale_update") {
+    const candles = data.p[1].s1;
+    if (candles) {
+      candles.forEach((c) => {
+        console.log(
+          `📊 EUR/USD Candle: O:${c.o} H:${c.h} L:${c.l} C:${c.c} V:${c.v} T:${new Date(
+            c.t * 1000
+          ).toLocaleString()}`
+        );
+      });
+    }
+  }
+}
+
+socket.on("message", (msg) => parseMessage(msg));
+
+socket.on("close", () => {
+  console.log("❌ Disconnected from TradingView WebSocket");
 });
 
-ws.on("close", () => console.log("❌ Disconnected from TradingView WebSocket"));
-ws.on("error", (err) => console.error("⚠️ Error:", err.message));
+socket.on("error", (err) => {
+  console.error("⚠️ WebSocket Error:", err.message);
+});
