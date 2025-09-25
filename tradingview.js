@@ -1,20 +1,13 @@
-const { TradingViewScan } = require("tradingview-scraper");
+const { getIndicators, getTicker } = require("tradingview-scraper");
 
+// Example: EURUSD ka ticker fetch karna
 (async () => {
   try {
-    const scan = new TradingViewScan();
-    await scan.init();
+    console.log("📡 Fetching EUR/USD data from TradingView...");
 
-    // Multiple Forex Pairs
-    const pairs = ["EURUSD", "GBPUSD", "XAUUSD"];
-
-    for (let pair of pairs) {
-      const result = await scan.scan(pair, "FX_IDC"); // FX_IDC = Forex data
-      console.log(`📊 ${pair} → Price: ${result.price}`);
-    }
-
-    scan.close();
-  } catch (error) {
-    console.error("❌ Error fetching data:", error);
+    const ticker = await getTicker("FX:EURUSD");
+    console.log("✅ Data received:", ticker);
+  } catch (err) {
+    console.error("❌ Error fetching data:", err.message);
   }
 })();
