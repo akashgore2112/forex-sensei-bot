@@ -1,12 +1,11 @@
-const { getIndicators, getTicker } = require("tradingview-scraper");
+const { getTvData } = require("tradingview-scraper");
 
-// Example: EURUSD ka ticker fetch karna
 (async () => {
   try {
     console.log("📡 Fetching EUR/USD data from TradingView...");
 
-    const ticker = await getTicker("FX:EURUSD");
-    console.log("✅ Data received:", ticker);
+    const data = await getTvData("FX:EURUSD");
+    console.log("✅ Data received:", data);
   } catch (err) {
     console.error("❌ Error fetching data:", err.message);
   }
