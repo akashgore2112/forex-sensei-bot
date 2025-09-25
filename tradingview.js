@@ -22,34 +22,33 @@ socket.on("open", () => {
   sendMessage(JSON.stringify({ m: "chart_create_session", p: [chartSession, ""] }));
   sendMessage(JSON.stringify({ m: "quote_create_session", p: [quoteSession] }));
 
-  // Add EURUSD symbol
-  sendMessage(
-    JSON.stringify({
-      m: "quote_add_symbols",
-      p: [quoteSession, "FX_IDC:EURUSD", { flags: ["force_permission"] }],
-    })
-  );
+  // Add symbol to quote session
+sendMessage(
+  JSON.stringify({
+    m: "quote_add_symbols",
+    p: [quoteSession, "FX:EURUSD", { flags: ["force_permission"] }],
+  })
+);
 
-  // Resolve symbol for chart session
-  sendMessage(
-    JSON.stringify({
-      m: "resolve_symbol",
-      p: [
-        chartSession,
-        "symbol_1",
-        '{"symbol":"FX_IDC:EURUSD","adjustment":"splits","session":"regular"}',
-      ],
-    })
-  );
+// Resolve symbol for chart session
+sendMessage(
+  JSON.stringify({
+    m: "resolve_symbol",
+    p: [
+      chartSession,
+      "symbol_1",
+      '{"symbol":"FX:EURUSD","adjustment":"splits","session":"regular"}',
+    ],
+  })
+);
 
-  // Subscribe candles (1m)
-  sendMessage(
-    JSON.stringify({
-      m: "create_series",
-      p: [chartSession, "s1", "s1", "symbol_1", "1", 300],
-    })
-  );
-});
+// Subscribe candles (1m)
+sendMessage(
+  JSON.stringify({
+    m: "create_series",
+    p: [chartSession, "s1", "s1", "symbol_1", "1", 300],
+  })
+);
 
 // Parse TradingView protocol messages
 function parseMessage(message) {
