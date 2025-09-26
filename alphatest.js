@@ -1,24 +1,88 @@
-const axios = require("axios");
+const axios = require('axios');
 
-// 🔑 Tumhari API key
-const API_KEY = "E391L86ZEMDYMFGP";
+class AlphaVantageAPI {
+  constructor(apiKey) {
+    this.apiKey = apiKey;
+    this.baseUrl = 'https://www.alphavantage.co/query';
+  }
 
-// Function to fetch forex rate
-async function getForexRate(from = "EUR", to = "USD") {
-  try {
-    const url = `https://www.alphavantage.co/query?function=CURRENCY_EXCHANGE_RATE&from_currency=${from}&to_currency=${to}&apikey=${API_KEY}`;
-    const response = await axios.get(url);
-
-    if (response.data["Realtime Currency Exchange Rate"]) {
-      const rate = response.data["Realtime Currency Exchange Rate"]["5. Exchange Rate"];
-      console.log(`💱 ${from}/${to} → ${rate}`);
-    } else {
-      console.log("❌ API limit ya response issue:", response.data);
+  // ✅ Real-time exchange rate
+  async getRealTimeRate(fromCurrency, toCurrency) {
+    try {
+      const response = await axios.get(this.baseUrl, {
+        params: {
+          function: 'CURRENCY_EXCHANGE_RATE',
+          from_currency: fromCurrency,
+          to_currency: toCurrency,
+          apikey: this.apiKey
+        }
+      });
+      return response.data['Realtime Currency Exchange Rate'];
+    } catch (error) {
+      console.error('Error fetching real-time rate:', error.message);
+      return null;
     }
-  } catch (error) {
-    console.error("⚠️ Error fetching forex rate:", error.message);
+  }
+
+  // ✅ Intraday OHLC data
+  async getIntradayData(fromSymbol, toSymbol, interval = '1min', outputSize = 'compact') {
+    try {
+      const response = await axios.get(this.baseUrl, {
+        params: {
+          function: 'FX_INTRADAY',
+          from_symbol: fromSymbol,
+          to_symbol: toSymbol,
+          interval: interval,
+          outputsize: outputSize,
+          apikey: this.apiKey
+        }
+      });
+      return response.data;
+    } catch (error) {
+      console.error('Error fetching intraday data:', error.message);
+      return null;
+    }
+  }
+
+  // ✅ Daily OHLC data
+  async getDailyData(fromSymbol, toSymbol, outputSize = 'compact') {
+    try {
+      const response = await axios.get(this.baseUrl, {
+        params: {
+          function: 'FX_DAILY',
+          from_symbol: fromSymbol,
+          to_symbol: toSymbol,
+          outputsize: outputSize,
+          apikey: this.apiKey
+        }
+      });
+      return response.data;
+    } catch (error) {
+      console.error('Error fetching daily data:', error.message);
+      return null;
+    }
+  }
+
+  // ✅ RSI technical indicator
+  async getRSI(symbol, interval = '1min', timePeriod = 14) {
+    try {
+      const response = await axios.get(this.baseUrl, {
+        params: {
+          function: 'RSI',
+          symbol: symbol,
+          interval: interval,
+          time_period: timePeriod,
+          series_type: 'close',
+          apikey: this.apiKey
+        }
+      });
+      return response.data;
+    } catch (error) {
+      console.error('Error fetching RSI:', error.message);
+      return null;
+    }
   }
 }
 
-// Test run
-getForexRate("EUR", "USD");
+// ✅ Direct class export
+module.exports = AlphaVantageAPI;
