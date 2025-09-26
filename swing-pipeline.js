@@ -1,53 +1,80 @@
-const SwingTradingDataCollector = require("./swing-data-collector");
+const axios = require("axios");
 const ForexDataProcessor = require("./standardizer");
-const processor = new ForexDataProcessor();
-const { SwingIndicators } = require("./swing-indicators");
 
-const apiKey = "E391L86ZEMDYMFGP"; // Tumhara Alpha Vantage API key
-const collector = new SwingTradingDataCollector(apiKey);
-const processor = new ForexDataProcessor();
-const indicators = new SwingIndicators();
+class SwingPipeline {
+  constructor(apiKey) {
+    this.apiKey = apiKey;
+    this.baseUrl = "https://www.alphavantage.co/query";
+  }
 
-async function runSwingPipeline(pair) {
-  try {
-    const [fromSymbol, toSymbol] = pair.split("/");
+  // Daily OHLC data fetch
+  async getDailyData(fromSymbol, toSymbol, outputSize = "compact") {
+    try {
+      const response = await axios.get(this.baseUrl, {
+        params: {
+          function: "FX_DAILY",
+          from_symbol: fromSymbol,
+          to_symbol: toSymbol,
+          outputsize: outputSize, // "full" if more history needed
+          apikey: this.apiKey,
+        },
+      });
 
-    console.log(`\n🔄 Running Swing Trading Pipeline for ${pair}...\n`);
+      if (!response.data || !response.data["Time Series FX (Daily)"]) {
+        console.error("❌ No Daily Data received");
+        return [];
+      }
 
-    // Step 1: Fetch daily + weekly data
-    console.log("📡 Fetching Daily Data...");
-    const dailyRaw = await collector.getDailyData(fromSymbol, toSymbol, "compact");
-    const dailyData = processor.standardizeOHLCData(dailyRaw, "Daily");
+      return ForexDataProcessor.standardizeOHLCData(
+        response.data,
+        "Daily"
+      );
+    } catch (error) {
+      console.error("❌ Error fetching Daily Data:", error.message);
+      return [];
+    }
+  }
 
-    console.log("📡 Fetching Weekly Data...");
-    const weeklyRaw = await collector.getWeeklyData(fromSymbol, toSymbol);
-    const weeklyData = processor.standardizeOHLCData(weeklyRaw, "Weekly");
+  // Weekly OHLC data fetch
+  async getWeeklyData(fromSymbol, toSymbol) {
+    try {
+      const response = await axios.get(this.baseUrl, {
+        params: {
+          function: "FX_WEEKLY",
+          from_symbol: fromSymbol,
+          to_symbol: toSymbol,
+          apikey: this.apiKey,
+        },
+      });
 
-    // Step 2: Calculate indicators
-    console.log("📊 Calculating Indicators...");
-    const enrichedData = indicators.calculateAll(dailyData);
+      if (!response.data || !response.data["Time Series FX (Weekly)"]) {
+        console.error("❌ No Weekly Data received");
+        return [];
+      }
 
-    // Step 3: Final structured dataset
-    const finalOutput = {
-      pair: pair,
-      latestDaily: dailyData[dailyData.length - 1],
-      latestWeekly: weeklyData[weeklyData.length - 1],
-      indicators: enrichedData[enrichedData.length - 1]
-    };
-
-    console.log("\n✅ Final Swing Dataset:");
-    console.log(JSON.stringify(finalOutput, null, 2));
-
-    return finalOutput;
-
-  } catch (error) {
-    console.error("❌ Pipeline error:", error.message);
+      return ForexDataProcessor.standardizeOHLCData(
+        response.data,
+        "Weekly"
+      );
+    } catch (error) {
+      console.error("❌ Error fetching Weekly Data:", error.message);
+      return [];
+    }
   }
 }
 
-// Run pipeline
-if (require.main === module) {
-  runSwingPipeline("EUR/USD");
-}
+// -------------------
+// Run pipeline test
+// -------------------
+(async () => {
+  const apiKey = "E391L86ZEMDYMFGP"; // tumhari API key
+  const pipeline = new SwingPipeline(apiKey);
 
-module.exports = { runSwingPipeline };
+  console.log("📊 Fetching EUR/USD Daily Data...");
+  const dailyData = await pipeline.getDailyData("EUR", "USD", "compact");
+  console.log("✅ Daily Data Sample:", dailyData.slice(-3));
+
+  console.log("\n📊 Fetching EUR/USD Weekly Data...");
+  const weeklyData = await pipeline.getWeeklyData("EUR", "USD");
+  console.log("✅ Weekly Data Sample:", weeklyData.slice(-3));
+})();
