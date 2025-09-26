@@ -1,5 +1,6 @@
 const SwingTradingDataCollector = require("./swing-data-collector");
-const { ForexDataProcessor } = require("./standardizer");
+const ForexDataProcessor = require("./standardizer");
+const processor = new ForexDataProcessor();
 const { SwingIndicators } = require("./swing-indicators");
 
 const apiKey = "E391L86ZEMDYMFGP"; // Tumhara Alpha Vantage API key
