@@ -1,4 +1,4 @@
-const AlphaVantageAPI = require("./alphaVantage");
+const AlphaVantageAPI = require("./alphatest");
 const { ForexDataProcessor } = require("./standardizer");
 
 // 🔑 Tumhari API Key
