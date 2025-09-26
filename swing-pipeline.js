@@ -1,80 +1,117 @@
 const axios = require("axios");
-const ForexDataProcessor = require("./standardizer");
+const CacheManager = require("./cache-manager");
+const RateLimiter = require("./rate-limiter");
 
-class SwingPipeline {
+class AlphaVantageAPI {
   constructor(apiKey) {
     this.apiKey = apiKey;
     this.baseUrl = "https://www.alphavantage.co/query";
   }
 
-  // Daily OHLC data fetch
+  // Daily Data
   async getDailyData(fromSymbol, toSymbol, outputSize = "compact") {
-    try {
-      const response = await axios.get(this.baseUrl, {
-        params: {
-          function: "FX_DAILY",
-          from_symbol: fromSymbol,
-          to_symbol: toSymbol,
-          outputsize: outputSize, // "full" if more history needed
-          apikey: this.apiKey,
-        },
-      });
-
-      if (!response.data || !response.data["Time Series FX (Daily)"]) {
-        console.error("❌ No Daily Data received");
-        return [];
-      }
-
-      return ForexDataProcessor.standardizeOHLCData(
-        response.data,
-        "Daily"
-      );
-    } catch (error) {
-      console.error("❌ Error fetching Daily Data:", error.message);
-      return [];
-    }
+    const response = await axios.get(this.baseUrl, {
+      params: {
+        function: "FX_DAILY",
+        from_symbol: fromSymbol,
+        to_symbol: toSymbol,
+        outputsize: outputSize,
+        apikey: this.apiKey,
+      },
+    });
+    return response.data;
   }
 
-  // Weekly OHLC data fetch
+  // Weekly Data
   async getWeeklyData(fromSymbol, toSymbol) {
-    try {
-      const response = await axios.get(this.baseUrl, {
-        params: {
-          function: "FX_WEEKLY",
-          from_symbol: fromSymbol,
-          to_symbol: toSymbol,
-          apikey: this.apiKey,
-        },
-      });
-
-      if (!response.data || !response.data["Time Series FX (Weekly)"]) {
-        console.error("❌ No Weekly Data received");
-        return [];
-      }
-
-      return ForexDataProcessor.standardizeOHLCData(
-        response.data,
-        "Weekly"
-      );
-    } catch (error) {
-      console.error("❌ Error fetching Weekly Data:", error.message);
-      return [];
-    }
+    const response = await axios.get(this.baseUrl, {
+      params: {
+        function: "FX_WEEKLY",
+        from_symbol: fromSymbol,
+        to_symbol: toSymbol,
+        apikey: this.apiKey,
+      },
+    });
+    return response.data;
   }
 }
 
-// -------------------
-// Run pipeline test
-// -------------------
-(async () => {
-  const apiKey = "E391L86ZEMDYMFGP"; // tumhari API key
-  const pipeline = new SwingPipeline(apiKey);
+class SwingPipeline {
+  constructor(apiKey) {
+    this.api = new AlphaVantageAPI(apiKey);
+    this.cache = new CacheManager();
+    this.rateLimiter = new RateLimiter(5, 60000); // 5 calls/minute
+  }
 
-  console.log("📊 Fetching EUR/USD Daily Data...");
-  const dailyData = await pipeline.getDailyData("EUR", "USD", "compact");
-  console.log("✅ Daily Data Sample:", dailyData.slice(-3));
+  // ✅ Daily Data with Cache + Rate Limiter
+  async getDailyData(fromSymbol, toSymbol) {
+    const cacheKey = `daily_${fromSymbol}_${toSymbol}`;
 
-  console.log("\n📊 Fetching EUR/USD Weekly Data...");
-  const weeklyData = await pipeline.getWeeklyData("EUR", "USD");
-  console.log("✅ Weekly Data Sample:", weeklyData.slice(-3));
-})();
+    // Check cache first
+    let cachedData = this.cache.get(cacheKey);
+    if (cachedData) {
+      console.log("📂 Loaded Daily Data from Cache");
+      return cachedData;
+    }
+
+    // Wait if rate limit reached
+    await this.rateLimiter.waitIfNeeded();
+
+    const data = await this.api.getDailyData(fromSymbol, toSymbol, "full");
+
+    if (data && data["Time Series FX (Daily)"]) {
+      const timeSeries = data["Time Series FX (Daily)"];
+      const formattedData = Object.keys(timeSeries).map((date) => ({
+        date,
+        open: parseFloat(timeSeries[date]["1. open"]),
+        high: parseFloat(timeSeries[date]["2. high"]),
+        low: parseFloat(timeSeries[date]["3. low"]),
+        close: parseFloat(timeSeries[date]["4. close"]),
+      }));
+
+      // Save to cache for 60 sec
+      this.cache.set(cacheKey, formattedData, 60);
+      console.log("💾 Saved Daily Data to Cache");
+
+      return formattedData;
+    }
+
+    return [];
+  }
+
+  // ✅ Weekly Data with Cache + Rate Limiter
+  async getWeeklyData(fromSymbol, toSymbol) {
+    const cacheKey = `weekly_${fromSymbol}_${toSymbol}`;
+
+    let cachedData = this.cache.get(cacheKey);
+    if (cachedData) {
+      console.log("📂 Loaded Weekly Data from Cache");
+      return cachedData;
+    }
+
+    await this.rateLimiter.waitIfNeeded();
+
+    const data = await this.api.getWeeklyData(fromSymbol, toSymbol);
+
+    if (data && data["Weekly Time Series FX"]) {
+      const timeSeries = data["Weekly Time Series FX"];
+      const formattedData = Object.keys(timeSeries).map((date) => ({
+        date,
+        open: parseFloat(timeSeries[date]["1. open"]),
+        high: parseFloat(timeSeries[date]["2. high"]),
+        low: parseFloat(timeSeries[date]["3. low"]),
+        close: parseFloat(timeSeries[date]["4. close"]),
+      }));
+
+      // Save to cache for 10 minutes
+      this.cache.set(cacheKey, formattedData, 600);
+      console.log("💾 Saved Weekly Data to Cache");
+
+      return formattedData;
+    }
+
+    return [];
+  }
+}
+
+module.exports = SwingPipeline;
