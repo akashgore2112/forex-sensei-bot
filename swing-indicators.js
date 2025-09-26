@@ -1,62 +1,42 @@
-// swing-indicators.js
-const technicalIndicators = require("technicalindicators");
+const ti = require("technicalindicators");
 
 class SwingIndicators {
-  // EMA (Exponential Moving Average)
-  static calculateEMA(values, period) {
-    return technicalIndicators.EMA.calculate({
-      period: period,
-      values: values,
-    });
-  }
+  static calculateAll(data) {
+    if (!data || data.length === 0) return {};
 
-  // RSI (Relative Strength Index)
-  static calculateRSI(values, period = 14) {
-    return technicalIndicators.RSI.calculate({
-      period: period,
-      values: values,
-    });
-  }
+    const closes = data.map(d => d.close);
 
-  // MACD (Moving Average Convergence Divergence)
-  static calculateMACD(values, fast = 12, slow = 26, signal = 9) {
-    return technicalIndicators.MACD.calculate({
-      values: values,
-      fastPeriod: fast,
-      slowPeriod: slow,
-      signalPeriod: signal,
-      SimpleMAOscillator: false,
-      SimpleMASignal: false,
-    });
-  }
-
-  // ADX (Average Directional Index)
-  static calculateADX(high, low, close, period = 14) {
-    return technicalIndicators.ADX.calculate({
-      high,
-      low,
-      close,
-      period,
-    });
-  }
-
-  // ATR (Average True Range) - volatility
-  static calculateATR(high, low, close, period = 14) {
-    return technicalIndicators.ATR.calculate({
-      high,
-      low,
-      close,
-      period,
-    });
-  }
-
-  // Bollinger Bands
-  static calculateBollinger(values, period = 20, stdDev = 2) {
-    return technicalIndicators.BollingerBands.calculate({
-      period: period,
-      values: values,
-      stdDev: stdDev,
-    });
+    return {
+      ema20: ti.EMA.calculate({ period: 20, values: closes }).slice(-1)[0],
+      ema50: ti.EMA.calculate({ period: 50, values: closes }).slice(-1)[0],
+      ema200: ti.EMA.calculate({ period: 200, values: closes }).slice(-1)[0],
+      rsi14: ti.RSI.calculate({ period: 14, values: closes }).slice(-1)[0],
+      macd: ti.MACD.calculate({
+        values: closes,
+        fastPeriod: 12,
+        slowPeriod: 26,
+        signalPeriod: 9,
+        SimpleMAOscillator: false,
+        SimpleMASignal: false
+      }).slice(-1)[0],
+      adx: ti.ADX.calculate({
+        high: data.map(d => d.high),
+        low: data.map(d => d.low),
+        close: closes,
+        period: 14
+      }).slice(-1)[0],
+      atr: ti.ATR.calculate({
+        high: data.map(d => d.high),
+        low: data.map(d => d.low),
+        close: closes,
+        period: 14
+      }).slice(-1)[0],
+      bollinger: ti.BollingerBands.calculate({
+        values: closes,
+        period: 20,
+        stdDev: 2
+      }).slice(-1)[0]
+    };
   }
 }
 
