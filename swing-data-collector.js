@@ -1,100 +1,99 @@
-const axios = require("axios");
+const axios = require('axios');
+const fs = require('fs');
+const path = require('path');
 
-// 🔑 Apna Alpha Vantage API key yaha daalo
-const API_KEY = "E391L86ZEMDYMFGP";
-const BASE_URL = "https://www.alphavantage.co/query";
-
-// Simple Rate Limiter (5 calls/minute)
-class RateLimiter {
-  constructor(maxCalls, timeWindow) {
-    this.maxCalls = maxCalls;
-    this.timeWindow = timeWindow;
-    this.calls = [];
-  }
-
-  async waitIfNeeded() {
-    const now = Date.now();
-    this.calls = this.calls.filter(t => now - t < this.timeWindow);
-
-    if (this.calls.length >= this.maxCalls) {
-      const waitTime = this.timeWindow - (now - this.calls[0]);
-      console.log(`⏳ Rate limit hit. Waiting ${waitTime / 1000}s...`);
-      await new Promise(resolve => setTimeout(resolve, waitTime));
-    }
-
-    this.calls.push(now);
-  }
-}
-
-// Data Collector Class
-class SwingDataCollector {
+class SwingTradingDataCollector {
   constructor(apiKey) {
     this.apiKey = apiKey;
-    this.baseUrl = BASE_URL;
-    this.rateLimiter = new RateLimiter(5, 60000);
+    this.baseUrl = 'https://www.alphavantage.co/query';
+    this.cacheFile = path.join(__dirname, 'mock-daily-weekly.json');
   }
 
-  // Daily OHLCV Data
-  async getDailyData(fromSymbol, toSymbol, outputSize = "full") {
-    await this.rateLimiter.waitIfNeeded();
+  async getDailyData(fromSymbol, toSymbol, outputSize = 'compact') {
+    try {
+      const response = await axios.get(this.baseUrl, {
+        params: {
+          function: 'FX_DAILY',
+          from_symbol: fromSymbol,
+          to_symbol: toSymbol,
+          outputsize: outputSize,
+          apikey: this.apiKey
+        }
+      });
 
-    const response = await axios.get(this.baseUrl, {
-      params: {
-        function: "FX_DAILY",
-        from_symbol: fromSymbol,
-        to_symbol: toSymbol,
-        outputsize: outputSize, // 'full' => full historical data
-        apikey: this.apiKey,
-      },
-    });
-
-    return this.processData(response.data["Time Series FX (Daily)"]);
-  }
-
-  // Weekly OHLCV Data
-  async getWeeklyData(fromSymbol, toSymbol) {
-    await this.rateLimiter.waitIfNeeded();
-
-    const response = await axios.get(this.baseUrl, {
-      params: {
-        function: "FX_WEEKLY",
-        from_symbol: fromSymbol,
-        to_symbol: toSymbol,
-        apikey: this.apiKey,
-      },
-    });
-
-    return this.processData(response.data["Time Series FX (Weekly)"]);
-  }
-
-  // Standardize OHLC data
-  processData(rawData) {
-    if (!rawData) {
-      console.error("❌ No data received");
-      return [];
+      if (response.data['Time Series FX (Daily)']) {
+        return this.processDailyData(response.data);
+      } else {
+        console.log("⚠️ API limit reached or no data. Using fallback...");
+        return this.loadMockData().daily;
+      }
+    } catch (err) {
+      console.log("❌ Error fetching Daily Data, using fallback...");
+      return this.loadMockData().daily;
     }
+  }
 
-    return Object.entries(rawData).map(([date, values]) => ({
+  async getWeeklyData(fromSymbol, toSymbol) {
+    try {
+      const response = await axios.get(this.baseUrl, {
+        params: {
+          function: 'FX_WEEKLY',
+          from_symbol: fromSymbol,
+          to_symbol: toSymbol,
+          apikey: this.apiKey
+        }
+      });
+
+      if (response.data['Time Series FX (Weekly)']) {
+        return this.processWeeklyData(response.data);
+      } else {
+        console.log("⚠️ API limit reached or no weekly data. Using fallback...");
+        return this.loadMockData().weekly;
+      }
+    } catch (err) {
+      console.log("❌ Error fetching Weekly Data, using fallback...");
+      return this.loadMockData().weekly;
+    }
+  }
+
+  processDailyData(data) {
+    const series = data['Time Series FX (Daily)'];
+    return Object.entries(series).map(([date, values]) => ({
       date,
-      open: parseFloat(values["1. open"]),
-      high: parseFloat(values["2. high"]),
-      low: parseFloat(values["3. low"]),
-      close: parseFloat(values["4. close"]),
+      open: parseFloat(values['1. open']),
+      high: parseFloat(values['2. high']),
+      low: parseFloat(values['3. low']),
+      close: parseFloat(values['4. close'])
     }));
+  }
+
+  processWeeklyData(data) {
+    const series = data['Time Series FX (Weekly)'];
+    return Object.entries(series).map(([date, values]) => ({
+      date,
+      open: parseFloat(values['1. open']),
+      high: parseFloat(values['2. high']),
+      low: parseFloat(values['3. low']),
+      close: parseFloat(values['4. close'])
+    }));
+  }
+
+  loadMockData() {
+    if (fs.existsSync(this.cacheFile)) {
+      return JSON.parse(fs.readFileSync(this.cacheFile, 'utf8'));
+    }
+    // Agar fallback file nahi hai to static mock return karo
+    return {
+      daily: [
+        { date: "2025-09-25", open: 1.1738, high: 1.1753, low: 1.1645, close: 1.1665 },
+        { date: "2025-09-24", open: 1.1760, high: 1.1785, low: 1.1700, close: 1.1730 }
+      ],
+      weekly: [
+        { date: "2025-09-21", open: 1.1700, high: 1.1800, low: 1.1600, close: 1.1750 },
+        { date: "2025-09-14", open: 1.1650, high: 1.1720, low: 1.1580, close: 1.1620 }
+      ]
+    };
   }
 }
 
-// Quick Test
-(async () => {
-  const collector = new SwingDataCollector(API_KEY);
-
-  console.log("📅 Fetching EUR/USD Daily Data...");
-  const daily = await collector.getDailyData("EUR", "USD", "compact");
-  console.log("✅ Latest Daily:", daily[0]);
-
-  console.log("\n📅 Fetching EUR/USD Weekly Data...");
-  const weekly = await collector.getWeeklyData("EUR", "USD");
-  console.log("✅ Latest Weekly:", weekly[0]);
-})();
-
-module.exports = SwingDataCollector;
+module.exports = SwingTradingDataCollector;
