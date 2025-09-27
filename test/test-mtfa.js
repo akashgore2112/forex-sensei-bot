@@ -1,5 +1,5 @@
 // test-mtfa.js
-const MultiTimeframeAnalysis = require("../mtfa");
+const MultiTimeframeAnalysis = require("./mtfa");
 
 async function testMTFA() {
   console.log("🔍 Testing Multi-Timeframe Analysis...");
