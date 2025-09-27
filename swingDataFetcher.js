@@ -1,7 +1,7 @@
 // swingDataFetcher.js
 const AlphaVantageAPI = require("./alphatest");
 const ForexDataProcessor = require("./standardizer");
-const CacheManager = require("./cacheManager");
+const CacheManager = require("./cache-manager");
 const RateLimiter = require("./rateLimiter");
 
 const api = new AlphaVantageAPI("E391L86ZEMDYMFGP"); // 👈 Tumhari API key
