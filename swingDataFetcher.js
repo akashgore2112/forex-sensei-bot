@@ -1,5 +1,5 @@
 // swingDataFetcher.js
-const AlphaVantageAPI = require("./alphaVantage");
+const AlphaVantageAPI = require("./alphatest");
 const ForexDataProcessor = require("./standardizer");
 const CacheManager = require("./cacheManager");
 const RateLimiter = require("./rateLimiter");
