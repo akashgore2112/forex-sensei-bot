@@ -2,7 +2,7 @@
 // 🔍 Multi-Timeframe Analysis (MTFA)
 // Goal: Combine Daily + Weekly + Monthly indicators into overall bias
 
-const SwingDataFetcher = require("../swingDataFetcher");
+const SwingDataFetcher = require("./swingDataFetcher");
 const SwingIndicators = require("../swing-indicators");
 
 class MTFA {
