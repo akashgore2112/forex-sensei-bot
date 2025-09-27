@@ -14,21 +14,18 @@ class SwingDataFetcher {
     try {
       const cacheKey = `${pair}_DAILY`;
 
-      // Check cache first
       const cached = cache.get(cacheKey);
       if (cached) {
         console.log(`📦 Loaded from cache: ${cacheKey}`);
         return cached;
       }
 
-      // Otherwise fetch new data
       await limiter.waitIfNeeded();
       const data = await api.getDailyData(pair.split("/")[0], pair.split("/")[1], "full");
       const standardized = ForexDataProcessor.standardizeOHLCData(data, "DAILY");
 
       if (standardized.length > 0) {
-        // Save in cache
-        cache.set(cacheKey, standardized, 1440); // 1440 min = 24 hrs
+        cache.set(cacheKey, standardized, 1440); // 1 day
         console.log(`💾 Cached new data for: ${cacheKey}`);
       } else {
         console.warn(`⚠️ No standardized daily data found for ${pair}`);
@@ -46,7 +43,6 @@ class SwingDataFetcher {
     try {
       const cacheKey = `${pair}_WEEKLY`;
 
-      // Check cache first
       const cached = cache.get(cacheKey);
       if (cached) {
         console.log(`📦 Loaded from cache: ${cacheKey}`);
@@ -67,6 +63,35 @@ class SwingDataFetcher {
       return standardized;
     } catch (err) {
       console.error(`❌ Error fetching WEEKLY data for ${pair}:`, err.message);
+      return [];
+    }
+  }
+
+  // ✅ Fetch Monthly Data (NEW)
+  static async getMonthlyData(pair) {
+    try {
+      const cacheKey = `${pair}_MONTHLY`;
+
+      const cached = cache.get(cacheKey);
+      if (cached) {
+        console.log(`📦 Loaded from cache: ${cacheKey}`);
+        return cached;
+      }
+
+      await limiter.waitIfNeeded();
+      const data = await api.getMonthlyData(pair.split("/")[0], pair.split("/")[1]);
+      const standardized = ForexDataProcessor.standardizeOHLCData(data, "MONTHLY");
+
+      if (standardized.length > 0) {
+        cache.set(cacheKey, standardized, 43200); // 30 days
+        console.log(`💾 Cached new data for: ${cacheKey}`);
+      } else {
+        console.warn(`⚠️ No standardized monthly data found for ${pair}`);
+      }
+
+      return standardized;
+    } catch (err) {
+      console.error(`❌ Error fetching MONTHLY data for ${pair}:`, err.message);
       return [];
     }
   }
