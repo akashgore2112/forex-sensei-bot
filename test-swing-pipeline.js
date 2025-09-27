@@ -1,35 +1,77 @@
 const axios = require("axios");
 const ForexDataProcessor = require("./standardizer");
 
-async function runPipeline() {
-  console.log("📊 Fetching EUR/USD Daily Data...");
+// ✅ API Key
+const API_KEY = "E391L86ZEMDYMFGP";
 
-  const apiKey = "E391L86ZEMDYMFGP"; // tumhari API key
+// ✅ Base URL
+const BASE_URL = "https://www.alphavantage.co/query";
+
+// ✅ Fetch Daily Data (EUR/USD)
+async function fetchDailyData() {
   try {
-    // Fetch daily FX data
-    const response = await axios.get("https://www.alphavantage.co/query", {
+    console.log("\n📡 Fetching EUR/USD Daily Data...");
+    const response = await axios.get(BASE_URL, {
       params: {
         function: "FX_DAILY",
         from_symbol: "EUR",
         to_symbol: "USD",
-        outputsize: "compact", // "full" agar pura historical data chahiye
-        apikey: apiKey,
+        outputsize: "compact", // change to 'full' if needed
+        apikey: API_KEY,
       },
     });
 
-    const rawData = response.data;
-    if (!rawData || !rawData["Time Series FX (Daily)"]) {
-      console.error("❌ Error: No data returned from Alpha Vantage");
-      return;
-    }
+    console.log("\n🔍 Raw API Response Keys:", Object.keys(response.data));
 
-    // Process with standardizer
-    const cleanData = ForexDataProcessor.standardizeOHLCData(rawData, "Daily");
+    // Debug print full response (comment this out later)
+    console.log("\n📝 Raw Response Sample:", JSON.stringify(response.data).slice(0, 500), "...");
 
-    console.log("✅ Standardized Data Sample:", cleanData.slice(-3)); // last 3 days
+    const standardized = ForexDataProcessor.standardizeOHLCData(
+      response.data,
+      "DAILY"
+    );
+
+    console.log("\n✅ Standardized Daily Data Sample:", standardized.slice(-5)); // last 5 entries
   } catch (err) {
-    console.error("❌ Pipeline error:", err.message);
+    console.error("❌ Error fetching daily data:", err.message);
   }
 }
 
-runPipeline();
+// ✅ Fetch Weekly Data (EUR/USD)
+async function fetchWeeklyData() {
+  try {
+    console.log("\n📡 Fetching EUR/USD Weekly Data...");
+    const response = await axios.get(BASE_URL, {
+      params: {
+        function: "FX_WEEKLY",
+        from_symbol: "EUR",
+        to_symbol: "USD",
+        apikey: API_KEY,
+      },
+    });
+
+    console.log("\n🔍 Raw API Response Keys:", Object.keys(response.data));
+
+    // Debug print full response (comment this out later)
+    console.log("\n📝 Raw Response Sample:", JSON.stringify(response.data).slice(0, 500), "...");
+
+    const standardized = ForexDataProcessor.standardizeOHLCData(
+      response.data,
+      "WEEKLY"
+    );
+
+    console.log("\n✅ Standardized Weekly Data Sample:", standardized.slice(-5));
+  } catch (err) {
+    console.error("❌ Error fetching weekly data:", err.message);
+  }
+}
+
+// ✅ Main Runner
+(async () => {
+  console.log("🚀 Testing Swing Pipeline...\n");
+
+  await fetchDailyData();
+  await fetchWeeklyData();
+
+  console.log("\n🎯 Test Completed!");
+})();
