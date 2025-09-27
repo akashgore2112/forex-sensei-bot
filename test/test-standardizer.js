@@ -38,17 +38,43 @@ async function testStandardizer() {
     console.log("❌ Failed to fetch real-time rate");
   }
 
-  // Delay before next call (avoid rate limit)
+  // Delay before next call
   await sleep(15000);
 
   // ✅ Intraday OHLC
   console.log("\n📊 Intraday EUR/USD (1min)...");
   const intraday = await safeCall(() => api.getIntradayData("EUR", "USD", "1min"), 3, 15000);
   if (intraday && intraday["Time Series FX (1min)"]) {
-    const cleanIntraday = ForexDataProcessor.standardizeOHLCData(intraday, "1min");
+    const cleanIntraday = ForexDataProcessor.standardizeOHLCData(intraday, "1min", "EUR", "USD");
     console.log("✅ Standardized Intraday (latest 3 candles):", cleanIntraday.slice(-3));
   } else {
     console.log("❌ Failed to fetch intraday data");
+  }
+
+  // Delay before next call
+  await sleep(15000);
+
+  // ✅ Daily OHLC
+  console.log("\n📅 Daily EUR/USD...");
+  const daily = await safeCall(() => api.getDailyData("EUR", "USD", "compact"), 3, 15000);
+  if (daily && daily["Time Series FX (Daily)"]) {
+    const cleanDaily = ForexDataProcessor.standardizeOHLCData(daily, "DAILY", "EUR", "USD");
+    console.log("✅ Standardized Daily (last 3 days):", cleanDaily.slice(-3));
+  } else {
+    console.log("❌ Failed to fetch daily data");
+  }
+
+  // Delay before next call
+  await sleep(15000);
+
+  // ✅ Weekly OHLC
+  console.log("\n📅 Weekly EUR/USD...");
+  const weekly = await safeCall(() => api.getWeeklyData("EUR", "USD"), 3, 15000);
+  if (weekly && weekly["Time Series FX (Weekly)"]) {
+    const cleanWeekly = ForexDataProcessor.standardizeOHLCData(weekly, "WEEKLY", "EUR", "USD");
+    console.log("✅ Standardized Weekly (last 3 weeks):", cleanWeekly.slice(-3));
+  } else {
+    console.log("❌ Failed to fetch weekly data");
   }
 }
 
