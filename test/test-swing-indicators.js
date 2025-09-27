@@ -1,5 +1,5 @@
 // test-swing-indicators.js
-const SwingDataFetcher = require("../swingDataFetcher"); // ✅ hum daily/weekly fetcher use kar rahe hain
+const SwingDataFetcher = require("../swingDataFetcher"); 
 const SwingIndicators = require("../swing-indicators");
 
 async function testIndicators() {
@@ -24,6 +24,9 @@ async function testIndicators() {
   console.log(`EMA200: ${indicators.ema200}`);
   console.log(`RSI(14): ${indicators.rsi14}`);
   console.log("MACD:", indicators.macd);
+  console.log("ADX:", indicators.adx);
+  console.log("ATR:", indicators.atr);
+  console.log("Bollinger Bands:", indicators.bollinger);
 
   console.log("\n🔍 Support/Resistance Levels:");
   console.log("Support:", indicators.supportResistance.support);
