@@ -42,11 +42,12 @@ class ForexDataProcessor {
 
     let timeSeries;
     if (interval === "DAILY") {
-      timeSeries = alphaVantageData["Time Series FX (Daily)"];
-    } else if (interval === "WEEKLY") {
-      timeSeries = alphaVantageData["Time Series FX (Weekly)"];
-    }
-
+  timeSeries = alphaVantageData["Time Series FX (Daily)"];
+} else if (interval === "WEEKLY") {
+  timeSeries = alphaVantageData["Time Series FX (Weekly)"];
+} else if (interval === "MONTHLY") {
+  timeSeries = alphaVantageData["Time Series FX (Monthly)"];
+}
     if (!timeSeries) {
       console.warn(`⚠️ Time series not found for interval: ${interval}`);
       return [];
