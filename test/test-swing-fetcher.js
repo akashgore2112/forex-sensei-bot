@@ -1,6 +1,5 @@
 // test-swing-fetcher.js
-const SwingDataFetcher = require("./swingDataFetcher");
-
+const SwingDataFetcher = require("../swingDataFetcher");
 async function testSwingFetcher() {
   console.log("🔍 Testing Swing Data Fetcher...");
 
