@@ -10,24 +10,21 @@ class CacheManager {
     }
   }
 
-  // ✅ Generate file path
   _getFilePath(key) {
     return path.join(this.cacheDir, `${key}.json`);
   }
 
-  // ✅ Save data to cache
-  set(key, data, ttlMinutes = 1440) {
+  // ✅ Save data
+  save(key, data) {
     const filePath = this._getFilePath(key);
-    const payload = {
+    fs.writeFileSync(filePath, JSON.stringify({
       timestamp: Date.now(),
-      ttl: ttlMinutes,
       data
-    };
-    fs.writeFileSync(filePath, JSON.stringify(payload, null, 2));
+    }, null, 2));
   }
 
-  // ✅ Load data if cache is valid
-  get(key) {
+  // ✅ Load data
+  load(key, maxAgeMinutes = 1440) {
     const filePath = this._getFilePath(key);
     if (!fs.existsSync(filePath)) return null;
 
@@ -35,18 +32,27 @@ class CacheManager {
     const cached = JSON.parse(raw);
 
     const ageMinutes = (Date.now() - cached.timestamp) / 60000;
-    if (ageMinutes > cached.ttl) {
-      return null; // expired
+    if (ageMinutes > maxAgeMinutes) {
+      return null;
     }
     return cached.data;
   }
 
-  // ✅ Clear cache
+  // ✅ Clear
   clear(key) {
     const filePath = this._getFilePath(key);
     if (fs.existsSync(filePath)) {
       fs.unlinkSync(filePath);
     }
+  }
+
+  // ✅ Aliases (for consistency with SwingDataFetcher)
+  set(key, data, maxAgeMinutes = 1440) {
+    this.save(key, data);
+  }
+
+  get(key, maxAgeMinutes = 1440) {
+    return this.load(key, maxAgeMinutes);
   }
 }
 
