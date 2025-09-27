@@ -19,7 +19,7 @@ class AlphaVantageAPI {
       });
       return response.data['Realtime Currency Exchange Rate'];
     } catch (error) {
-      console.error('Error fetching real-time rate:', error.message);
+      console.error('❌ Error fetching real-time rate:', error.message);
       return null;
     }
   }
@@ -39,7 +39,7 @@ class AlphaVantageAPI {
       });
       return response.data;
     } catch (error) {
-      console.error('Error fetching intraday data:', error.message);
+      console.error('❌ Error fetching intraday data:', error.message);
       return null;
     }
   }
@@ -58,7 +58,43 @@ class AlphaVantageAPI {
       });
       return response.data;
     } catch (error) {
-      console.error('Error fetching daily data:', error.message);
+      console.error('❌ Error fetching daily data:', error.message);
+      return null;
+    }
+  }
+
+  // ✅ Weekly OHLC data
+  async getWeeklyData(fromSymbol, toSymbol) {
+    try {
+      const response = await axios.get(this.baseUrl, {
+        params: {
+          function: 'FX_WEEKLY',
+          from_symbol: fromSymbol,
+          to_symbol: toSymbol,
+          apikey: this.apiKey
+        }
+      });
+      return response.data;
+    } catch (error) {
+      console.error('❌ Error fetching weekly data:', error.message);
+      return null;
+    }
+  }
+
+  // ✅ Monthly OHLC data (optional future use)
+  async getMonthlyData(fromSymbol, toSymbol) {
+    try {
+      const response = await axios.get(this.baseUrl, {
+        params: {
+          function: 'FX_MONTHLY',
+          from_symbol: fromSymbol,
+          to_symbol: toSymbol,
+          apikey: this.apiKey
+        }
+      });
+      return response.data;
+    } catch (error) {
+      console.error('❌ Error fetching monthly data:', error.message);
       return null;
     }
   }
@@ -78,7 +114,7 @@ class AlphaVantageAPI {
       });
       return response.data;
     } catch (error) {
-      console.error('Error fetching RSI:', error.message);
+      console.error('❌ Error fetching RSI:', error.message);
       return null;
     }
   }
