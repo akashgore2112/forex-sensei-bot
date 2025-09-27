@@ -10,17 +10,19 @@ class CacheManager {
     }
   }
 
+  // ✅ Ensure file path safe (replace invalid chars)
   _getFilePath(key) {
-    return path.join(this.cacheDir, `${key}.json`);
+    const safeKey = key.replace(/[\/\\]/g, "_"); // replace / and \ with _
+    return path.join(this.cacheDir, `${safeKey}.json`);
   }
 
   // ✅ Save data
   save(key, data) {
     const filePath = this._getFilePath(key);
-    fs.writeFileSync(filePath, JSON.stringify({
-      timestamp: Date.now(),
-      data
-    }, null, 2));
+    fs.writeFileSync(
+      filePath,
+      JSON.stringify({ timestamp: Date.now(), data }, null, 2)
+    );
   }
 
   // ✅ Load data
@@ -46,7 +48,7 @@ class CacheManager {
     }
   }
 
-  // ✅ Aliases (for consistency with SwingDataFetcher)
+  // ✅ Aliases
   set(key, data, maxAgeMinutes = 1440) {
     this.save(key, data);
   }
