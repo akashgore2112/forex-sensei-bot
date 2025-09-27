@@ -1,3 +1,4 @@
+// cache-manager.js
 const fs = require("fs");
 const path = require("path");
 
@@ -15,16 +16,18 @@ class CacheManager {
   }
 
   // ✅ Save data to cache
-  save(key, data) {
+  set(key, data, ttlMinutes = 1440) {
     const filePath = this._getFilePath(key);
-    fs.writeFileSync(filePath, JSON.stringify({
+    const payload = {
       timestamp: Date.now(),
+      ttl: ttlMinutes,
       data
-    }, null, 2));
+    };
+    fs.writeFileSync(filePath, JSON.stringify(payload, null, 2));
   }
 
   // ✅ Load data if cache is valid
-  load(key, maxAgeMinutes = 1440) { // default: 1 day
+  get(key) {
     const filePath = this._getFilePath(key);
     if (!fs.existsSync(filePath)) return null;
 
@@ -32,7 +35,7 @@ class CacheManager {
     const cached = JSON.parse(raw);
 
     const ageMinutes = (Date.now() - cached.timestamp) / 60000;
-    if (ageMinutes > maxAgeMinutes) {
+    if (ageMinutes > cached.ttl) {
       return null; // expired
     }
     return cached.data;
