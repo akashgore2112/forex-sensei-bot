@@ -1,5 +1,6 @@
 // test-swing-fetcher.js
 const SwingDataFetcher = require("../swingDataFetcher");
+
 async function testSwingFetcher() {
   console.log("🔍 Testing Swing Data Fetcher...");
 
@@ -20,6 +21,15 @@ async function testSwingFetcher() {
       console.log("📊 Last 3 Weekly Candles:", weeklyData.slice(-3));
     } else {
       console.warn("⚠️ No Weekly Data returned for EUR/USD.");
+    }
+
+    // ✅ Fetch EUR/USD monthly candles (NEW)
+    const monthlyData = await SwingDataFetcher.getMonthlyData("EUR/USD");
+    if (monthlyData && monthlyData.length > 0) {
+      console.log("✅ EUR/USD Monthly Candles Fetched!");
+      console.log("📊 Last 3 Monthly Candles:", monthlyData.slice(-3));
+    } else {
+      console.warn("⚠️ No Monthly Data returned for EUR/USD.");
     }
 
   } catch (err) {
