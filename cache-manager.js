@@ -9,37 +9,40 @@ class CacheManager {
     }
   }
 
-  // Make a cache file path
-  _getCachePath(key) {
+  // ✅ Generate file path
+  _getFilePath(key) {
     return path.join(this.cacheDir, `${key}.json`);
   }
 
-  // Save cache data
-  saveCache(key, data, ttlMinutes = 60) {
-    const cacheFile = this._getCachePath(key);
-    const record = {
-      data,
-      expiry: Date.now() + ttlMinutes * 60 * 1000, // expiry in ms
-    };
-    fs.writeFileSync(cacheFile, JSON.stringify(record, null, 2));
+  // ✅ Save data to cache
+  save(key, data) {
+    const filePath = this._getFilePath(key);
+    fs.writeFileSync(filePath, JSON.stringify({
+      timestamp: Date.now(),
+      data
+    }, null, 2));
   }
 
-  // Load cache data
-  loadCache(key) {
-    const cacheFile = this._getCachePath(key);
-    if (!fs.existsSync(cacheFile)) return null;
+  // ✅ Load data if cache is valid
+  load(key, maxAgeMinutes = 1440) { // default: 1 day
+    const filePath = this._getFilePath(key);
+    if (!fs.existsSync(filePath)) return null;
 
-    try {
-      const record = JSON.parse(fs.readFileSync(cacheFile, "utf-8"));
-      if (record.expiry > Date.now()) {
-        return record.data; // valid cache
-      } else {
-        fs.unlinkSync(cacheFile); // expired cache delete
-        return null;
-      }
-    } catch (err) {
-      console.error("Cache read error:", err);
-      return null;
+    const raw = fs.readFileSync(filePath, "utf-8");
+    const cached = JSON.parse(raw);
+
+    const ageMinutes = (Date.now() - cached.timestamp) / 60000;
+    if (ageMinutes > maxAgeMinutes) {
+      return null; // expired
+    }
+    return cached.data;
+  }
+
+  // ✅ Clear cache
+  clear(key) {
+    const filePath = this._getFilePath(key);
+    if (fs.existsSync(filePath)) {
+      fs.unlinkSync(filePath);
     }
   }
 }
