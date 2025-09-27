@@ -30,14 +30,49 @@ class MTFA {
       const weeklyIndicators = SwingIndicators.calculateAll(weekly);
       const monthlyIndicators = SwingIndicators.calculateAll(monthly);
 
-      // 🚧 Placeholder: later we’ll add confluence logic
+      // ✅ Get bias for each timeframe
+      const dailyBias = this.getBias(dailyIndicators);
+      const weeklyBias = this.getBias(weeklyIndicators);
+      const monthlyBias = this.getBias(monthlyIndicators);
+
+      // ✅ Confluence Logic
+      const allBiases = [dailyBias, weeklyBias, monthlyBias];
+      const bullishCount = allBiases.filter(b => b === "BULLISH").length;
+      const bearishCount = allBiases.filter(b => b === "BEARISH").length;
+
+      let overallBias = "NEUTRAL";
+      let confidence = 50;
+
+      if (bullishCount === 3) {
+        overallBias = "BULLISH";
+        confidence = 100;
+      } else if (bearishCount === 3) {
+        overallBias = "BEARISH";
+        confidence = 100;
+      } else if (bullishCount === 2) {
+        overallBias = "BULLISH";
+        confidence = 70;
+      } else if (bearishCount === 2) {
+        overallBias = "BEARISH";
+        confidence = 70;
+      } else if (bullishCount === 1 || bearishCount === 1) {
+        overallBias = "NEUTRAL";
+        confidence = 40;
+      }
+
+      // ✅ Final Result
       const result = {
         pair,
         daily: dailyIndicators,
         weekly: weeklyIndicators,
         monthly: monthlyIndicators,
-        overallBias: "NEUTRAL", // temporary placeholder
-        confidence: 0 // temporary placeholder
+        biases: {
+          daily: dailyBias,
+          weekly: weeklyBias,
+          monthly: monthlyBias,
+        },
+        overallBias,
+        confidence
       };
 
       return result;
@@ -45,6 +80,19 @@ class MTFA {
       console.error("❌ Error in MTFA analysis:", err.message);
       return null;
     }
+  }
+
+  /**
+   * Simple bias calculation from indicators
+   * Rule: EMA20 vs EMA50
+   */
+  static getBias(indicators) {
+    if (!indicators || !indicators.ema20 || !indicators.ema50) return "NEUTRAL";
+
+    if (indicators.ema20 > indicators.ema50) return "BULLISH";
+    if (indicators.ema20 < indicators.ema50) return "BEARISH";
+
+    return "NEUTRAL";
   }
 }
 
