@@ -1,5 +1,5 @@
 const axios = require("axios");
-const ForexDataProcessor = require("./standardizer");
+const ForexDataProcessor = require("../standardizer");  // ✅ fixed path
 
 // ✅ API Key
 const API_KEY = "E391L86ZEMDYMFGP";
@@ -24,7 +24,11 @@ async function fetchDailyData() {
     console.log("\n🔍 Raw API Response Keys:", Object.keys(response.data));
 
     // Debug print full response (comment this out later)
-    console.log("\n📝 Raw Response Sample:", JSON.stringify(response.data).slice(0, 500), "...");
+    console.log(
+      "\n📝 Raw Response Sample:",
+      JSON.stringify(response.data).slice(0, 500),
+      "..."
+    );
 
     const standardized = ForexDataProcessor.standardizeOHLCData(
       response.data,
@@ -53,7 +57,11 @@ async function fetchWeeklyData() {
     console.log("\n🔍 Raw API Response Keys:", Object.keys(response.data));
 
     // Debug print full response (comment this out later)
-    console.log("\n📝 Raw Response Sample:", JSON.stringify(response.data).slice(0, 500), "...");
+    console.log(
+      "\n📝 Raw Response Sample:",
+      JSON.stringify(response.data).slice(0, 500),
+      "..."
+    );
 
     const standardized = ForexDataProcessor.standardizeOHLCData(
       response.data,
