@@ -2,7 +2,7 @@
 const AlphaVantageAPI = require("./alphatest");
 const ForexDataProcessor = require("./standardizer");
 const CacheManager = require("./cache-manager");
-const RateLimiter = require("./rateLimiter");
+const RateLimiter = require("./rate-limiter");
 
 const api = new AlphaVantageAPI("E391L86ZEMDYMFGP"); // 👈 Tumhari API key
 const cache = new CacheManager();
