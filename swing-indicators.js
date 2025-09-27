@@ -22,6 +22,27 @@ class SwingIndicators {
       SimpleMASignal: false
     });
 
+    // ✅ New Indicators
+    const adx = ti.ADX.calculate({
+      high: highs,
+      low: lows,
+      close: closes,
+      period: 14
+    });
+
+    const atr = ti.ATR.calculate({
+      high: highs,
+      low: lows,
+      close: closes,
+      period: 14
+    });
+
+    const bollinger = ti.BollingerBands.calculate({
+      values: closes,
+      period: 20,
+      stdDev: 2
+    });
+
     // ✅ Advanced Support/Resistance Detection
     const supportResistance = this.calculateSupportResistance(data);
 
@@ -31,6 +52,9 @@ class SwingIndicators {
       ema200: ema200.slice(-1)[0],
       rsi14: rsi14.slice(-1)[0],
       macd: macd.slice(-1)[0],
+      adx: adx.slice(-1)[0],
+      atr: atr.slice(-1)[0],
+      bollinger: bollinger.slice(-1)[0],
       supportResistance
     };
   }
