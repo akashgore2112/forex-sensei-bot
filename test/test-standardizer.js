@@ -1,5 +1,5 @@
-const AlphaVantageAPI = require('./alphatest');
-const ForexDataProcessor = require('./standardizer');
+const AlphaVantageAPI = require('../alphatest');
+const ForexDataProcessor = require('../standardizer');
 
 const api = new AlphaVantageAPI("E391L86ZEMDYMFGP");
 
