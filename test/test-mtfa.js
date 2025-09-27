@@ -1,14 +1,12 @@
-// test-mtfa.js
-const MultiTimeframeAnalysis = require("../mtfa");
+// test/test-mtfa.js
+const MTFA = require("../mtfa");
 
 async function testMTFA() {
   console.log("🔍 Testing Multi-Timeframe Analysis...");
 
   try {
-    const mtfa = new MultiTimeframeAnalysis();
-
-    // ✅ Test EUR/USD pair
-    const result = await mtfa.analyze("EUR/USD");
+    // ✅ Directly use static method
+    const result = await MTFA.analyze("EUR/USD");
 
     console.log("\n📊 Multi-Timeframe Analysis Result:");
     console.dir(result, { depth: null });
