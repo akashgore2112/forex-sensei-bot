@@ -1,4 +1,4 @@
-const CacheManager = require("./cache-manager");
+const CacheManager = require("../cache-manager");
 
 // ✅ Create cache manager
 const cache = new CacheManager();
