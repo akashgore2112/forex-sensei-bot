@@ -1,6 +1,6 @@
 // test-swing-indicators.js
-const SwingDataFetcher = require("./swingDataFetcher"); // ✅ hum daily/weekly fetcher use kar rahe hain
-const SwingIndicators = require("./swing-indicators");
+const SwingDataFetcher = require("../swingDataFetcher"); // ✅ hum daily/weekly fetcher use kar rahe hain
+const SwingIndicators = require("../swing-indicators");
 
 async function testIndicators() {
   console.log("📊 Fetching EUR/USD Daily Data...");
