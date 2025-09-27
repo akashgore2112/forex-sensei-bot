@@ -29,7 +29,7 @@ class ForexDataProcessor {
   }
 
   // ✅ Standardize OHLC Data (Daily / Weekly)
-  static standardizeOHLCData(alphaVantageData, interval) {
+  static standardizeOHLCData(alphaVantageData, interval, fromSymbol = "EUR", toSymbol = "USD") {
     if (!alphaVantageData) {
       console.warn("⚠️ No OHLC data received");
       return [];
@@ -57,16 +57,18 @@ class ForexDataProcessor {
 
       for (const [timestamp, ohlc] of Object.entries(timeSeries)) {
         standardizedData.push({
-          date: new Date(timestamp).toISOString(),
+          pair: `${fromSymbol}/${toSymbol}`,  // ✅ now included
+          timestamp: new Date(timestamp).toISOString(), // ✅ standardized timestamp
           open: parseFloat(ohlc["1. open"] || 0),
           high: parseFloat(ohlc["2. high"] || 0),
           low: parseFloat(ohlc["3. low"] || 0),
           close: parseFloat(ohlc["4. close"] || 0),
+          volume: 0, // ✅ AlphaVantage forex data doesn’t have volume → default 0
         });
       }
 
       return standardizedData.sort(
-        (a, b) => new Date(a.date) - new Date(b.date)
+        (a, b) => new Date(a.timestamp) - new Date(b.timestamp)
       );
     } catch (err) {
       console.error("❌ Error in standardizeOHLCData:", err.message);
