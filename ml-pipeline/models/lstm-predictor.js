@@ -1,15 +1,18 @@
 // ml-pipeline/models/lstm-predictor.js
-// 📘 LSTM Price Predictor (Phase 2 - Step 1.1 Final with MTFA input)
+// 📘 LSTM Price Predictor (Phase 2 - Step 1.1 Final with Normalization + MTFA input)
 
 const tf = require("@tensorflow/tfjs-node");
+const FeatureNormalizer = require("../training/feature-normalizer"); // ✅ Normalizer import
 
 class LSTMPricePredictor {
   constructor() {
     this.model = null;
     this.lookbackPeriod = 60;
     this.predictionHorizon = 5;
+    this.normalizer = new FeatureNormalizer(); // ✅ init
   }
 
+  // 🔹 Build LSTM Model
   async buildModel() {
     this.model = tf.sequential();
 
@@ -37,31 +40,91 @@ class LSTMPricePredictor {
     console.log("✅ LSTM Model Built Successfully");
   }
 
+  // 🔹 Prepare Training Data with Normalization
+  prepareTrainingData(historicalData) {
+    // Normalize first
+    const normalized = this.normalizer.normalizeDataset(historicalData);
+
+    const features = [];
+    const targets = [];
+
+    for (let i = this.lookbackPeriod; i < normalized.length - this.predictionHorizon; i++) {
+      const featureWindow = [];
+      for (let j = i - this.lookbackPeriod; j < i; j++) {
+        featureWindow.push([
+          normalized[j].close,
+          normalized[j].ema20,
+          normalized[j].rsi,
+          normalized[j].macd,
+          normalized[j].atr,
+        ]);
+      }
+      features.push(featureWindow);
+
+      const targetWindow = [];
+      for (let k = i + 1; k <= i + this.predictionHorizon; k++) {
+        targetWindow.push(normalized[k].close); // target = normalized close
+      }
+      targets.push(targetWindow);
+    }
+
+    return {
+      features: tf.tensor3d(features),
+      targets: tf.tensor2d(targets),
+    };
+  }
+
+  // 🔹 Prepare Input Features (Normalized)
   prepareInputFeatures(recentData) {
+    const normalized = this.normalizer.normalizeDataset(recentData);
     const inputFeatures = [
-      recentData.slice(-this.lookbackPeriod).map((d) => [
+      normalized.slice(-this.lookbackPeriod).map((d) => [
         d.close,
         d.ema20,
-        d.rsi14,
-        d.macd?.macd || 0,
+        d.rsi,
+        d.macd,
         d.atr,
       ]),
     ];
     return tf.tensor3d(inputFeatures);
   }
 
+  // 🔹 Confidence Calculation
   async calculateConfidence(predictionTensor, lastClose) {
     const predictedArray = await predictionTensor.data();
-    const lastPredicted = predictedArray[predictedArray.length - 1];
+    const predictedPrices = predictedArray.map((p) =>
+      this.normalizer.inverseTransformClose(p)
+    ); // inverse transform
+
+    const lastPredicted = predictedPrices[predictedPrices.length - 1];
     const error = Math.abs(lastPredicted - lastClose) / lastClose;
     return Math.max(0, 1 - error);
   }
 
+  // 🔹 Direction
   determinePriceDirection(predictedArray, lastClose) {
     const lastPredicted = predictedArray[predictedArray.length - 1];
     return lastPredicted > lastClose ? "BULLISH" : "BEARISH";
   }
 
+  // 🔹 Train Model
+  async trainModel(historicalData) {
+    const { features, targets } = this.prepareTrainingData(historicalData);
+
+    await this.model.fit(features, targets, {
+      epochs: 100,
+      batchSize: 32,
+      validationSplit: 0.2,
+      callbacks: tf.callbacks.earlyStopping({ patience: 10 }),
+    });
+
+    console.log("✅ LSTM Training Completed");
+
+    await this.model.save("file://./saved-models/lstm-price-predictor");
+    console.log("💾 Model Saved: ./saved-models/lstm-price-predictor");
+  }
+
+  // 🔹 Predict Next Prices (with inverse transform)
   async predict(recentData) {
     if (!this.model) {
       throw new Error("Model not built or loaded. Call buildModel() first.");
@@ -69,7 +132,11 @@ class LSTMPricePredictor {
 
     const tensorInput = this.prepareInputFeatures(recentData);
     const prediction = this.model.predict(tensorInput);
-    const predictedPrices = Array.from(await prediction.data());
+
+    const predictedNormalized = Array.from(await prediction.data());
+    const predictedPrices = predictedNormalized.map((p) =>
+      this.normalizer.inverseTransformClose(p)
+    );
 
     const lastClose = recentData[recentData.length - 1].close;
     const direction = this.determinePriceDirection(predictedPrices, lastClose);
