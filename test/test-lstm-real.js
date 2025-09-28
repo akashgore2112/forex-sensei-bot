@@ -24,13 +24,13 @@ async function runRealLSTMTest() {
   const indicators = await SwingIndicators.calculateAll(candles);
 
   // 3. Merge into processed data
-  const processed = candles.map((candle, idx) => ({
-    close: candle.close,
-    ema20: indicators.ema20[idx] || indicators.ema20[indicators.ema20.length - 1],
-    rsi: indicators.rsi14[idx] || indicators.rsi14[indicators.rsi14.length - 1],
-    macd: indicators.macd.MACD[idx] || indicators.macd.MACD[indicators.macd.MACD.length - 1],
-    atr: indicators.atr[idx] || indicators.atr[indicators.atr.length - 1],
-  }));
+  const processed = candles.map((c, i) => ({
+  close: c.close,
+  ema20: Array.isArray(indicators.ema20) ? indicators.ema20[i] : indicators.ema20,
+  rsi: Array.isArray(indicators.rsi14) ? indicators.rsi14[i] : indicators.rsi14,
+  macd: Array.isArray(indicators.macd.macd) ? indicators.macd.macd[i] : indicators.macd.macd,
+  atr: Array.isArray(indicators.atr) ? indicators.atr[i] : indicators.atr
+}));
 
   console.log(`✅ Processed ${processed.length} candles with indicators`);
 
