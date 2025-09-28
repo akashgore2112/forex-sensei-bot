@@ -1,70 +1,95 @@
-const ti = require("technicalindicators");
+const talib = require("talib");
 
 class SwingIndicators {
-  static calculateAll(data) {
+  static async calculateAll(data) {
     if (!data || data.length === 0) return {};
 
     const closes = data.map(d => d.close);
     const highs = data.map(d => d.high);
     const lows = data.map(d => d.low);
 
-    // ✅ Indicators
-    const ema20 = ti.EMA.calculate({ period: 20, values: closes });
-    const ema50 = ti.EMA.calculate({ period: 50, values: closes });
-    const ema200 = ti.EMA.calculate({ period: 200, values: closes });
-    const rsi14 = ti.RSI.calculate({ period: 14, values: closes });
-    const macd = ti.MACD.calculate({
-      values: closes,
-      fastPeriod: 12,
-      slowPeriod: 26,
-      signalPeriod: 9,
-      SimpleMAOscillator: false,
-      SimpleMASignal: false
+    // Helper function: run TA-Lib indicator
+    const run = (name, params) => {
+      return new Promise((resolve, reject) => {
+        talib.execute({ name, ...params }, (err, result) => {
+          if (err) return reject(err);
+          resolve(result.result);
+        });
+      });
+    };
+
+    // ✅ Indicators with TA-Lib
+    const ema20 = await run("EMA", { startIdx: 0, endIdx: closes.length - 1, inReal: closes, optInTimePeriod: 20 });
+    const ema50 = await run("EMA", { startIdx: 0, endIdx: closes.length - 1, inReal: closes, optInTimePeriod: 50 });
+    const ema200 = await run("EMA", { startIdx: 0, endIdx: closes.length - 1, inReal: closes, optInTimePeriod: 200 });
+
+    const rsi14 = await run("RSI", { startIdx: 0, endIdx: closes.length - 1, inReal: closes, optInTimePeriod: 14 });
+
+    const macd = await run("MACD", {
+      startIdx: 0,
+      endIdx: closes.length - 1,
+      inReal: closes,
+      optInFastPeriod: 12,
+      optInSlowPeriod: 26,
+      optInSignalPeriod: 9
     });
 
-    // ✅ New Indicators
-    const adx = ti.ADX.calculate({
+    const adx = await run("ADX", {
+      startIdx: 0,
+      endIdx: closes.length - 1,
       high: highs,
       low: lows,
       close: closes,
-      period: 14
+      optInTimePeriod: 14
     });
 
-    const atr = ti.ATR.calculate({
+    const atr = await run("ATR", {
+      startIdx: 0,
+      endIdx: closes.length - 1,
       high: highs,
       low: lows,
       close: closes,
-      period: 14
+      optInTimePeriod: 14
     });
 
-    const bollinger = ti.BollingerBands.calculate({
-      values: closes,
-      period: 20,
-      stdDev: 2
+    const bollinger = await run("BBANDS", {
+      startIdx: 0,
+      endIdx: closes.length - 1,
+      inReal: closes,
+      optInTimePeriod: 20,
+      optInNbDevUp: 2,
+      optInNbDevDn: 2,
+      optInMAType: 0 // simple moving average
     });
 
-    // ✅ Advanced Support/Resistance Detection
+    // ✅ Advanced Support/Resistance Detection (same as before)
     const supportResistance = this.calculateSupportResistance(data);
 
     return {
-      ema20: ema20.slice(-1)[0],
-      ema50: ema50.slice(-1)[0],
-      ema200: ema200.slice(-1)[0],
-      rsi14: rsi14.slice(-1)[0],
-      macd: macd.slice(-1)[0],
-      adx: adx.slice(-1)[0],
-      atr: atr.slice(-1)[0],
-      bollinger: bollinger.slice(-1)[0],
+      ema20: ema20.pop(),
+      ema50: ema50.pop(),
+      ema200: ema200.pop(),
+      rsi14: rsi14.pop(),
+      macd: {
+        macd: macd.outMACD.pop(),
+        signal: macd.outMACDSignal.pop(),
+        histogram: macd.outMACDHist.pop()
+      },
+      adx: adx.pop(),
+      atr: atr.pop(),
+      bollinger: {
+        upper: bollinger.outRealUpperBand.pop(),
+        middle: bollinger.outRealMiddleBand.pop(),
+        lower: bollinger.outRealLowerBand.pop()
+      },
       supportResistance
     };
   }
 
-  // 🔍 Advanced Support/Resistance Logic
+  // 🔍 Advanced Support/Resistance Logic (same as before)
   static calculateSupportResistance(data, lookback = 50) {
-    const closes = data.map(d => d.close);
     const highs = data.map(d => d.high);
     const lows = data.map(d => d.low);
-
     const recentData = data.slice(-lookback);
 
     let supportLevels = [];
@@ -79,18 +104,14 @@ class SwingIndicators {
       const currHigh = recentData[i].high;
       const nextHigh = recentData[i + 2].high;
 
-      // ✅ Identify support
       if (currLow < prevLow && currLow < nextLow) {
         supportLevels.push(currLow);
       }
-
-      // ✅ Identify resistance
       if (currHigh > prevHigh && currHigh > nextHigh) {
         resistanceLevels.push(currHigh);
       }
     }
 
-    // ✅ Strength calculation (count touches)
     const countTouches = (level, arr, tolerance = 0.001) =>
       arr.filter(v => Math.abs(v - level) / level < tolerance).length;
 
@@ -121,8 +142,8 @@ class SwingIndicators {
       .sort((a, b) => a.level - b.level);
 
     return {
-      support: uniqueSupports.slice(-3), // last 3 strong supports
-      resistance: uniqueResistances.slice(0, 3) // first 3 strong resistances
+      support: uniqueSupports.slice(-3),
+      resistance: uniqueResistances.slice(0, 3)
     };
   }
 }
