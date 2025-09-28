@@ -1,23 +1,23 @@
-const MTFA = require('../mtfa'); 
+const MTFA = require('../mtfa');
 const FeatureGenerator = require('../ml-pipeline/feature-engineering/feature-generator');
 
 (async () => {
   try {
-    const mtfaData = await MTFA.analyze("EUR/USD");
+    const pair = "EUR/USD";
+    const mtfaData = await MTFA.analyze(pair);
 
     console.log("\n=== RAW MTFA OUTPUT ===");
     console.log(JSON.stringify(mtfaData, null, 2));
 
-    console.log("\n=== RAW INDICATORS FROM MTFA (Daily) ===");
-    console.log(JSON.stringify(mtfaData.daily, null, 2));  // 👈 fix yaha
+    // ✅ Indicators + raw OHLC candles dono extract karte hain
+    const marketData = mtfaData.daily?.rawData || [];   // OHLC candles (close, high, low etc.)
+    const indicators = mtfaData.daily || {};            // EMA, RSI, MACD, ATR, Bollinger, S/R
 
-    const marketData = mtfaData.daily.rawData;   // agar rawData available ho
-    const indicators = mtfaData.daily;           // 👈 fix: direct daily use karna
-
+    // ✅ Feature Generator call
     const fg = new FeatureGenerator();
-    const features = fg.generateAllFeatures(marketData || [], indicators);
+    const features = fg.generateAllFeatures(marketData, indicators);
 
-    console.log("\n=== Generated ML Features ===");
+    console.log("\n=== Generated ML Features (Step 2.4 Output) ===");
     console.log(features);
 
   } catch (error) {
