@@ -18,7 +18,9 @@ class MLPipeline {
     if (!this.modelLoaded) {
       try {
         console.log("📥 Loading saved LSTM model...");
-        this.predictor.model = await tf.loadLayersModel("file://./saved-models/LSTM-model/model.json");
+        this.predictor.model = await tf.loadLayersModel(
+          "file://./saved-models/LSTM-model/model.json"
+        );
         this.modelLoaded = true;
         console.log("✅ Model loaded successfully!");
       } catch (err) {
@@ -61,14 +63,17 @@ class MLPipeline {
     const predictedClose = predValues[0][predValues[0].length - 1];
     const direction = predictedClose > lastClose ? "BULLISH" : "BEARISH";
 
-    // ✅ Confidence calculation (normalized inverse error)
-    const confidence = Math.max(
-      0,
-      1 - Math.abs(predictedClose - lastClose) / lastClose
-    );
+    // ✅ Confidence calculation (percentage + levels)
+    const rawConfidence = Math.max(0, 1 - Math.abs(predictedClose - lastClose) / lastClose);
+    const confidencePct = (rawConfidence * 100).toFixed(2);
+
+    let confidenceLevel = "LOW";
+    if (confidencePct > 60) confidenceLevel = "MEDIUM";
+    if (confidencePct > 80) confidenceLevel = "HIGH";
 
     // ✅ Volatility from ATR
-    const avgAtr = processed.slice(-60).reduce((sum, d) => sum + (d.atr || 0), 0) / 60;
+    const avgAtr =
+      processed.slice(-60).reduce((sum, d) => sum + (d.atr || 0), 0) / 60;
     let volatility = "LOW";
     if (avgAtr > 0.005) volatility = "MEDIUM";
     if (avgAtr > 0.01) volatility = "HIGH";
@@ -83,7 +88,8 @@ class MLPipeline {
         },
         signalClassification: {
           signal: direction === "BULLISH" ? "BUY" : "SELL",
-          confidence: confidence.toFixed(2),
+          confidence: `${confidencePct}%`,
+          confidenceLevel,
         },
         volatilityForecast: { level: volatility },
       },
