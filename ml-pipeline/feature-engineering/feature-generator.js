@@ -9,7 +9,8 @@ class FeatureGenerator {
       ...this.generateMomentumFeatures(indicators),
       ...this.generateVolatilityFeatures(marketData, indicators),
       ...this.generatePatternFeatures(marketData),
-      ...this.generateStatisticalFeatures(marketData)
+      ...this.generateStatisticalFeatures(marketData),
+      ...this.generateSupportResistanceFeatures(indicators)
     };
   }
 
@@ -32,16 +33,16 @@ class FeatureGenerator {
     const ema50 = indicators?.ema50 ?? 0;
     const ema200 = indicators?.ema200 ?? 0;
 
-    if (ema20 > ema50 && ema50 > ema200) return 1;
-    if (ema20 < ema50 && ema50 < ema200) return -1;
-    return 0;
+    if (ema20 > ema50 && ema50 > ema200) return 1;   // bullish alignment
+    if (ema20 < ema50 && ema50 < ema200) return -1;  // bearish alignment
+    return 0; // mixed
   }
 
   // =========================
   // Momentum Features
   // =========================
   generateMomentumFeatures(indicators) {
-    const rsi = indicators?.rsi14 ?? 50;  // 👈 rename fix
+    const rsi = indicators?.rsi14 ?? 50;  
     const macdHist = indicators?.macd?.histogram ?? 0;
 
     return {
@@ -62,9 +63,9 @@ class FeatureGenerator {
     const bbWidth = bbUpper - bbLower;
 
     return {
-      atr_normalized: atr / latestPrice,
-      bb_width: bbWidth / latestPrice,
-      volatility_spike: atr > (atr * 1.5) ? 1 : 0
+      atr_normalized: latestPrice ? atr / latestPrice : 0,
+      bb_width: latestPrice ? bbWidth / latestPrice : 0,
+      volatility_spike: atr > (bbWidth * 0.5) ? 1 : 0
     };
   }
 
@@ -76,13 +77,11 @@ class FeatureGenerator {
       return { higher_highs: 0, higher_lows: 0, breakout_pattern: 0 };
     }
 
-    const last3 = marketData.slice(-3).map(c => c.close);
-
+    const last3 = marketData.slice(-3);
     return {
-      higher_highs: last3[2] > last3[1] && last3[1] > last3[0] ? 1 : 0,
-      higher_lows: marketData[marketData.length - 1].low >
-                   marketData[marketData.length - 2].low ? 1 : 0,
-      breakout_pattern: last3[2] > Math.max(last3[0], last3[1]) ? 1 : 0
+      higher_highs: last3[2].high > last3[1].high && last3[1].high > last3[0].high ? 1 : 0,
+      higher_lows: last3[2].low > last3[1].low && last3[1].low > last3[0].low ? 1 : 0,
+      breakout_pattern: last3[2].close > Math.max(last3[0].high, last3[1].high) ? 1 : 0
     };
   }
 
@@ -109,6 +108,20 @@ class FeatureGenerator {
   avg(arr) {
     if (!arr || arr.length === 0) return 0;
     return arr.reduce((a, b) => a + b, 0) / arr.length;
+  }
+
+  // =========================
+  // Support/Resistance Features
+  // =========================
+  generateSupportResistanceFeatures(indicators) {
+    const sr = indicators?.SupportResistance || {};
+    const supports = sr.support || [];
+    const resistances = sr.resistance || [];
+
+    return {
+      support_strength: supports.filter(s => s.strength === "STRONG").length,
+      resistance_strength: resistances.filter(r => r.strength === "STRONG").length
+    };
   }
 }
 
