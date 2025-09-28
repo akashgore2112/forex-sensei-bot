@@ -4,6 +4,7 @@
 class FeatureNormalizer {
   constructor() {
     this.scalers = {}; // store min/max for each feature
+    this.fitted = false;
   }
 
   /**
@@ -19,6 +20,7 @@ class FeatureNormalizer {
       const max = Math.max(...values);
       this.scalers[key] = { min, max };
     });
+    this.fitted = true;
   }
 
   /**
@@ -26,6 +28,10 @@ class FeatureNormalizer {
    * @param {Array} data - same format as fit()
    */
   transform(data) {
+    if (!this.fitted) {
+      this.fit(data); // ✅ auto-fit if not fitted
+    }
+
     return data.map((d) => {
       const normalized = {};
       for (const key of Object.keys(this.scalers)) {
@@ -37,12 +43,26 @@ class FeatureNormalizer {
   }
 
   /**
-   * Inverse transform single prediction (back to real scale)
-   * @param {number[]} prediction - array of normalized predicted closes
+   * Convenience: Normalize in one step (fit + transform)
+   */
+  normalizeDataset(data) {
+    this.fit(data);
+    return this.transform(data);
+  }
+
+  /**
+   * Inverse transform predicted closes back to real price scale
+   * @param {number|number[]} prediction - single value or array of normalized closes
    */
   inverseTransformClose(prediction) {
+    if (!this.fitted) throw new Error("❌ Normalizer not fitted yet.");
     const { min, max } = this.scalers["close"];
-    return prediction.map((p) => p * (max - min) + min);
+
+    if (Array.isArray(prediction)) {
+      return prediction.map((p) => p * (max - min) + min);
+    } else {
+      return prediction * (max - min) + min;
+    }
   }
 }
 
