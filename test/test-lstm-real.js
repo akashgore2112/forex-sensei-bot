@@ -1,26 +1,32 @@
 // test/test-lstm-real.js
-// 📊 Step 1.1 - Real LSTM Test with Expected Output Format
+// 📊 Step 1.1 - Real LSTM Test with MTFA Daily Candles
 
 const LSTMPricePredictor = require("../ml-pipeline/models/lstm-predictor");
 const DataPreprocessor = require("../ml-pipeline/training/data-preprocessor");
-const SwingDataFetcher = require("../swingDataFetcher");
+const MTFA = require("../mtfa"); // ✅ Use Phase 1 MTFA
 const SwingIndicators = require("../swing-indicators");
 
 async function runRealLSTMTest() {
-  console.log("🚀 Starting Step 1.1: LSTM Training with Real Historical Data...");
+  console.log("🚀 Starting Step 1.1: LSTM Training with MTFA Daily Data...");
 
   const predictor = new LSTMPricePredictor();
   await predictor.buildModel();
 
-  const preprocessor = new DataPreprocessor(60, 5); // 60-day lookback, 5-day horizon
+  const preprocessor = new DataPreprocessor(60, 5);
 
-  // 1. Fetch real historical data
-  console.log("📊 Fetching historical candles (EUR/USD)...");
-  const candles = await SwingDataFetcher.getDailyData("EUR/USD");
-  console.log(`✅ Got ${candles.length} candles`);
+  // 1. Fetch MTFA Analysis (Phase 1 System)
+  console.log("📊 Running MTFA to fetch candles + indicators...");
+  const mtfaResult = await MTFA.analyze("EUR/USD");
 
-  // 2. Add indicators
-  console.log("📈 Calculating indicators...");
+  if (!mtfaResult || !mtfaResult.dailyCandles?.length) {
+    throw new Error("❌ MTFA did not return daily candles. Check Phase 1 system.");
+  }
+
+  const candles = mtfaResult.dailyCandles;
+  console.log(`✅ Got ${candles.length} daily candles from MTFA`);
+
+  // 2. Recalculate indicators for consistency (we need arrays)
+  console.log("📈 Calculating indicators on MTFA candles...");
   const indicators = await SwingIndicators.calculateAll(candles);
 
   // 3. Merge candles + indicators
@@ -36,13 +42,13 @@ async function runRealLSTMTest() {
 
   console.log(`✅ Processed ${processed.length} candles with indicators`);
 
-  // 4. Convert into training sequences (tensors returned directly)
+  // 4. Convert into training sequences
   const { features, targets } = preprocessor.createSequences(processed);
   console.log("📊 Features shape:", features.shape);
   console.log("🎯 Targets shape:", targets.shape);
 
   // 5. Train model
-  console.log("⚡ Training LSTM on real forex data...");
+  console.log("⚡ Training LSTM on MTFA daily data...");
   await predictor.model.fit(features, targets, {
     epochs: 50,
     batchSize: 32,
@@ -68,7 +74,7 @@ async function runRealLSTMTest() {
   const recentData = processed.slice(-60); // last 60 days
   const prediction = await predictor.predict(recentData);
 
-  // ✅ Ensure output format matches Step 1.1 expected
+  // ✅ Format output as per plan
   const formattedResult = {
     predictedPrices: prediction.predictedPrices.map(p => Number(p.toFixed(5))),
     confidence: prediction.confidence ?? 0.0,
