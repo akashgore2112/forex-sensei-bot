@@ -35,12 +35,11 @@ async function runRealLSTMTest() {
   }));
 
   console.log(`✅ Processed ${processed.length} candles with indicators`);
-  console.log("🔎 Sample processed[0..2]:", processed.slice(0, 3));
 
-  // 4. Convert into training sequences (tensors already returned)
+  // 4. Convert into training sequences (tensors returned directly)
   const { features, targets } = preprocessor.createSequences(processed);
-  console.log("📊 Features tensor shape:", features.shape);
-  console.log("🎯 Targets tensor shape:", targets.shape);
+  console.log("📊 Features shape:", features.shape);
+  console.log("🎯 Targets shape:", targets.shape);
 
   // 5. Train model
   console.log("⚡ Training LSTM on real forex data...");
@@ -51,7 +50,9 @@ async function runRealLSTMTest() {
     callbacks: [
       {
         onEpochEnd: (epoch, logs) => {
-          console.log(`📉 Epoch ${epoch + 1}: loss=${logs.loss.toFixed(6)}, val_loss=${logs.val_loss?.toFixed(6)}`);
+          console.log(
+            `📉 Epoch ${epoch + 1}: loss=${logs.loss.toFixed(6)}, val_loss=${logs.val_loss?.toFixed(6)}`
+          );
         }
       }
     ],
