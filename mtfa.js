@@ -1,6 +1,5 @@
 // mtfa.js
 // 🔍 Multi-Timeframe Analysis (MTFA)
-// Goal: Combine Daily + Weekly + Monthly indicators into overall bias
 
 const SwingDataFetcher = require("./swingDataFetcher");
 const SwingIndicators = require("./swing-indicators");
@@ -15,7 +14,7 @@ class MTFA {
     try {
       console.log(`\n🔍 Running Multi-Timeframe Analysis for ${pair}...\n`);
 
-      // ✅ Fetch data from all 3 timeframes
+      // ✅ Fetch data from all 3 timeframes (candles)
       const daily = await SwingDataFetcher.getDailyData(pair);
       const weekly = await SwingDataFetcher.getWeeklyData(pair);
       const monthly = await SwingDataFetcher.getMonthlyData(pair);
@@ -25,10 +24,15 @@ class MTFA {
         return null;
       }
 
-      // ✅ Calculate indicators for each timeframe (async with TA-Lib)
+      // ✅ Calculate indicators for each timeframe
       const dailyIndicators = await SwingIndicators.calculateAll(daily);
       const weeklyIndicators = await SwingIndicators.calculateAll(weekly);
       const monthlyIndicators = await SwingIndicators.calculateAll(monthly);
+
+      // ✅ Attach rawData (candles) to indicators
+      const dailyData = { ...dailyIndicators, rawData: daily };
+      const weeklyData = { ...weeklyIndicators, rawData: weekly };
+      const monthlyData = { ...monthlyIndicators, rawData: monthly };
 
       // ✅ Get bias for each timeframe
       const dailyBias = this.getBias(dailyIndicators);
@@ -60,12 +64,12 @@ class MTFA {
         confidence = 40;
       }
 
-      // ✅ Final Result
+      // ✅ Final Result (indicators + candles)
       const result = {
         pair,
-        daily: dailyIndicators,
-        weekly: weeklyIndicators,
-        monthly: monthlyIndicators,
+        daily: dailyData,
+        weekly: weeklyData,
+        monthly: monthlyData,
         biases: {
           daily: dailyBias,
           weekly: weeklyBias,
