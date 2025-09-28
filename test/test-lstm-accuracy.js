@@ -36,8 +36,8 @@ async function testLSTMAccuracy() {
   console.log(`✅ Processed ${processed.length} candles with indicators`);
 
   // 4. Create training sequences
-  const { features, targets } = preprocessor.prepareTrainingData(processed);
-
+  const { features, targets } = preprocessor.createSequences(processed);
+  
   // Split 80/20
   const splitIndex = Math.floor(features.shape[0] * 0.8);
 
