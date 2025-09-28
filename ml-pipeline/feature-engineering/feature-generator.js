@@ -19,18 +19,15 @@ class FeatureGenerator {
   generateTrendFeatures(marketData, indicators) {
     const latestPrice = marketData[marketData.length - 1].close;
     return {
-      price_above_ema20: latestPrice > indicators.ema20.slice(-1)[0] ? 1 : 0,
-      price_above_ema50: latestPrice > indicators.ema50.slice(-1)[0] ? 1 : 0,
-      price_above_ema200: latestPrice > indicators.ema200.slice(-1)[0] ? 1 : 0,
+      price_above_ema20: latestPrice > indicators.ema20 ? 1 : 0,
+      price_above_ema50: latestPrice > indicators.ema50 ? 1 : 0,
+      price_above_ema200: latestPrice > indicators.ema200 ? 1 : 0,
       ema_alignment: this.checkEMAAlignment(indicators) // 1= bullish, -1= bearish, 0= mixed
     };
   }
 
   checkEMAAlignment(indicators) {
-    const ema20 = indicators.ema20.slice(-1)[0];
-    const ema50 = indicators.ema50.slice(-1)[0];
-    const ema200 = indicators.ema200.slice(-1)[0];
-
+    const { ema20, ema50, ema200 } = indicators;
     if (ema20 > ema50 && ema50 > ema200) return 1;
     if (ema20 < ema50 && ema50 < ema200) return -1;
     return 0;
@@ -40,12 +37,13 @@ class FeatureGenerator {
   // Momentum Features
   // =========================
   generateMomentumFeatures(indicators) {
-    const rsi = indicators.rsi.slice(-1)[0];
-    const macd = indicators.macd.histogram.slice(-1)[0];
+    const rsi = indicators.rsi;
+    const macdHist = indicators.macd?.histogram || 0;
+
     return {
       rsi_normalized: (rsi - 50) / 50, // -1 to +1
-      macd_histogram: macd,
-      momentum_score: Math.sign(macd) * Math.abs(rsi - 50) / 50
+      macd_histogram: macdHist,
+      momentum_score: Math.sign(macdHist) * Math.abs(rsi - 50) / 50
     };
   }
 
@@ -53,21 +51,17 @@ class FeatureGenerator {
   // Volatility Features
   // =========================
   generateVolatilityFeatures(marketData, indicators) {
-    const atr = indicators.atr.slice(-1)[0];
-    const bbUpper = indicators.bollinger.upper.slice(-1)[0];
-    const bbLower = indicators.bollinger.lower.slice(-1)[0];
+    const atr = indicators.atr;
+    const bbUpper = indicators.bollinger.upper;
+    const bbLower = indicators.bollinger.lower;
     const latestPrice = marketData[marketData.length - 1].close;
     const bbWidth = bbUpper - bbLower;
 
     return {
       atr_normalized: atr / latestPrice,
       bb_width: bbWidth / latestPrice,
-      volatility_spike: atr > this.avg(indicators.atr) * 1.5 ? 1 : 0
+      volatility_spike: atr > (atr * 1.5) ? 1 : 0 // simple spike check
     };
-  }
-
-  avg(arr) {
-    return arr.reduce((a, b) => a + b, 0) / arr.length;
   }
 
   // =========================
@@ -97,6 +91,11 @@ class FeatureGenerator {
       rolling_mean: mean,
       rolling_std: std
     };
+  }
+
+  avg(arr) {
+    if (!arr || arr.length === 0) return 0;
+    return arr.reduce((a, b) => a + b, 0) / arr.length;
   }
 }
 
