@@ -1,5 +1,5 @@
 // test/test-lstm-accuracy.js
-// 📊 Step 1.8 - Accuracy Evaluation of LSTM Model
+// 📊 Step 1.8 - Accuracy Evaluation of LSTM Model (Fixed + Debug)
 
 const LSTMPricePredictor = require("../ml-pipeline/models/lstm-predictor");
 const DataPreprocessor = require("../ml-pipeline/training/data-preprocessor");
@@ -26,30 +26,30 @@ async function testLSTMAccuracy() {
 
   // 3. Process data into features
   const processed = candles.map((c, i) => ({
-    close: c.close,
-    ema20: Array.isArray(indicators.ema20) ? indicators.ema20[i] : indicators.ema20,
-    rsi: Array.isArray(indicators.rsi14) ? indicators.rsi14[i] : indicators.rsi14,
-    macd: Array.isArray(indicators.macd.MACD) ? indicators.macd.MACD[i] : indicators.macd.MACD,
-    atr: Array.isArray(indicators.atr) ? indicators.atr[i] : indicators.atr,
+    close: Number.isFinite(c.close) ? c.close : 0,
+    ema20: Array.isArray(indicators.ema20) ? indicators.ema20[i] : indicators.ema20 || 0,
+    rsi: Array.isArray(indicators.rsi14) ? indicators.rsi14[i] : indicators.rsi14 || 0,
+    macd: Array.isArray(indicators.macd.MACD) ? indicators.macd.MACD[i] : indicators.macd.MACD || 0,
+    atr: Array.isArray(indicators.atr) ? indicators.atr[i] : indicators.atr || 0,
   }));
 
   console.log(`✅ Processed ${processed.length} candles with indicators`);
 
-  // 4. Create training sequences
+  // 4. Create training sequences (already tensors returned)
   const { features, targets } = preprocessor.createSequences(processed);
 
-  // Convert to tensors
-  const featureTensor = tf.tensor3d(features); // shape: [samples, 60, 5]
-  const targetTensor = tf.tensor2d(targets);   // shape: [samples, 5]
+  console.log("🛠 DEBUG Shapes:");
+  console.log("Features:", features.shape);
+  console.log("Targets:", targets.shape);
 
   // Split 80/20
-  const splitIndex = Math.floor(featureTensor.shape[0] * 0.8);
+  const splitIndex = Math.floor(features.shape[0] * 0.8);
 
-  const trainX = featureTensor.slice([0, 0, 0], [splitIndex, 60, 5]);
-  const trainY = targetTensor.slice([0, 0], [splitIndex, 5]);
+  const trainX = features.slice([0, 0, 0], [splitIndex, 60, 5]);
+  const trainY = targets.slice([0, 0], [splitIndex, 5]);
 
-  const testX = featureTensor.slice([splitIndex, 0, 0], [featureTensor.shape[0] - splitIndex, 60, 5]);
-  const testY = targetTensor.slice([splitIndex, 0], [targetTensor.shape[0] - splitIndex, 5]);
+  const testX = features.slice([splitIndex, 0, 0], [features.shape[0] - splitIndex, 60, 5]);
+  const testY = targets.slice([splitIndex, 0], [targets.shape[0] - splitIndex, 5]);
 
   console.log(`📊 Train size: ${trainX.shape[0]} | Test size: ${testX.shape[0]}`);
 
@@ -69,6 +69,9 @@ async function testLSTMAccuracy() {
   const predictions = predictor.model.predict(testX);
   const predValues = await predictions.array();
   const trueValues = await testY.array();
+
+  console.log("🛠 DEBUG First Prediction:", predValues[0]);
+  console.log("🛠 DEBUG First Target:", trueValues[0]);
 
   // Calculate Metrics
   let mse = 0, mae = 0, correctDir = 0;
