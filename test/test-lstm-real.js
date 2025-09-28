@@ -1,4 +1,6 @@
 // test/test-lstm-real.js
+// 📊 Step 1.1 - Real LSTM Test with Expected Output Format
+
 const LSTMPricePredictor = require("../ml-pipeline/models/lstm-predictor");
 const DataPreprocessor = require("../ml-pipeline/training/data-preprocessor");
 const SwingDataFetcher = require("../swingDataFetcher");
@@ -6,7 +8,7 @@ const SwingIndicators = require("../swing-indicators");
 const tf = require("@tensorflow/tfjs-node");
 
 async function runRealLSTMTest() {
-  console.log("🚀 Starting LSTM Training with Real Historical Data...");
+  console.log("🚀 Starting Step 1.1: LSTM Training with Real Historical Data...");
 
   const predictor = new LSTMPricePredictor();
   await predictor.buildModel();
@@ -16,14 +18,13 @@ async function runRealLSTMTest() {
   // 1. Fetch real historical data
   console.log("📊 Fetching historical candles (EUR/USD)...");
   const candles = await SwingDataFetcher.getDailyData("EUR/USD");
-
   console.log(`✅ Got ${candles.length} candles`);
 
   // 2. Add indicators
   console.log("📈 Calculating indicators...");
   const indicators = await SwingIndicators.calculateAll(candles);
 
-  // 3. Merge into processed data
+  // 3. Merge candles + indicators
   const processed = candles.map((c, i) => ({
     close: c.close,
     ema20: Array.isArray(indicators.ema20) ? indicators.ema20[i] : indicators.ema20,
@@ -38,7 +39,6 @@ async function runRealLSTMTest() {
 
   // 4. Convert into training sequences
   const { features, targets } = preprocessor.createSequences(processed);
-
   console.log("📊 Features length:", features.length);
   console.log("🎯 Targets length:", targets.length);
 
@@ -54,7 +54,6 @@ async function runRealLSTMTest() {
     validationSplit: 0.2,
     callbacks: tf.callbacks.earlyStopping({ patience: 5 }),
   });
-
   console.log("✅ Training Completed!");
 
   // 6. Save model
@@ -63,11 +62,19 @@ async function runRealLSTMTest() {
 
   // 7. Predict next 5 days
   console.log("\n🔮 Making 5-day prediction...");
-  const recentData = processed.slice(-60); // last 60 days for input
+  const recentData = processed.slice(-60); // last 60 days
   const prediction = await predictor.predict(recentData);
 
-  console.log("\n📌 Prediction Result:");
-  console.dir(prediction, { depth: null });
+  // ✅ Ensure output format matches Step 1.1 expected
+  const formattedResult = {
+    predictedPrices: prediction.predictedPrices,
+    confidence: prediction.confidence,
+    direction: prediction.direction,
+    volatility: prediction.volatility
+  };
+
+  console.log("\n📌 Final Prediction Result:");
+  console.dir(formattedResult, { depth: null });
 }
 
 runRealLSTMTest().catch((err) => {
