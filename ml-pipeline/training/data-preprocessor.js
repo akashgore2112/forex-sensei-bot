@@ -1,80 +1,40 @@
 // ml-pipeline/training/data-preprocessor.js
-// 🔄 Data Preprocessor for LSTM (Phase 2 Step 1.4 + Debugging)
+// 🔄 Data Preprocessor for LSTM (Phase 2 Step 1.1 using MTFA output)
 
-const SwingDataFetcher = require("../../swingDataFetcher");
-const SwingIndicators = require("../../swing-indicators");
-const tf = require("@tensorflow/tfjs-node"); // ✅ TensorFlow import
+const tf = require("@tensorflow/tfjs-node");
 
 class DataPreprocessor {
   constructor(lookback = 60, horizon = 5) {
-    this.lookback = lookback; // 60 days past data
-    this.horizon = horizon;   // predict next 5 days
+    this.lookback = lookback;
+    this.horizon = horizon;
   }
 
   /**
-   * Fetch + preprocess historical market data
+   * Preprocess MTFA output into training dataset
+   * @param {Array} mtfaData - Array of daily MTFA results with indicators
    */
-  async prepare(pair = "EUR/USD", limit = 600) {
-    console.log(`📊 Preparing training data for ${pair}...`);
-
-    // 1. Get historical candles
-    const dailyData = await SwingDataFetcher.getDailyData(pair);
-    const candles = dailyData.slice(-limit);
-
-    // 2. Add indicators
-    const indicators = await SwingIndicators.calculateAll(candles);
-
-    // 🛠 Debugging logs (first 5 values)
-    console.log("DEBUG EMA20:", indicators.ema20?.slice(0, 5));
-    console.log("DEBUG RSI14:", indicators.rsi14?.slice(0, 5));
-    console.log("DEBUG MACD:", indicators.macd ? indicators.macd.MACD?.slice(0, 5) : "MISSING");
-    console.log("DEBUG ATR:", indicators.atr?.slice(0, 5));
-
-    // 3. Build feature set with safe defaults
-    const processed = candles.map((candle, idx) => {
-      const dataPoint = {
-        close: Number.isFinite(candle.close) ? candle.close : 0,
-        ema20: Number.isFinite(indicators.ema20?.[idx]) ? indicators.ema20[idx] : 0,
-        rsi: Number.isFinite(indicators.rsi14?.[idx]) ? indicators.rsi14[idx] : 0,
-        macd: Number.isFinite(indicators.macd?.MACD?.[idx]) ? indicators.macd.MACD[idx] : 0,
-        atr: Number.isFinite(indicators.atr?.[idx]) ? indicators.atr[idx] : 0,
-      };
-
-      // 🔎 Debug invalid entries
-      if (Object.values(dataPoint).some(v => !Number.isFinite(v))) {
-        console.warn(`⚠️ Invalid data at index ${idx}:`, dataPoint);
-      }
-
-      return dataPoint;
-    });
-
-    console.log(`✅ Prepared ${processed.length} candles with indicators`);
-    return processed;
-  }
-
-  /**
-   * Convert processed data into LSTM-friendly sequences (returns Tensors)
-   */
-  createSequences(historicalData) {
+  createSequences(mtfaData) {
     const features = [];
     const targets = [];
 
-    for (let i = this.lookback; i < historicalData.length - this.horizon; i++) {
+    for (let i = this.lookback; i < mtfaData.length - this.horizon; i++) {
+      // 🔹 Build feature window (last 60 days of indicators)
       const featureWindow = [];
       for (let j = i - this.lookback; j < i; j++) {
         featureWindow.push([
-          historicalData[j].close || 0,
-          historicalData[j].ema20 || 0,
-          historicalData[j].rsi || 0,
-          historicalData[j].macd || 0,
-          historicalData[j].atr || 0,
+          mtfaData[j].close || 0,
+          mtfaData[j].ema20 || 0,
+          mtfaData[j].rsi14 || 0,
+          mtfaData[j].macd?.macd || 0,
+          mtfaData[j].atr || 0,
         ]);
       }
       features.push(featureWindow);
 
+      // 🔹 Build target window (next 5 closes)
       const targetWindow = [];
       for (let k = i; k < i + this.horizon; k++) {
-        targetWindow.push(historicalData[k].close || 0);
+        targetWindow.push(mtfaData[k].close || 0);
       }
       targets.push(targetWindow);
     }
@@ -82,20 +42,13 @@ class DataPreprocessor {
     console.log(`📊 Sequences created → Features: ${features.length}, Targets: ${targets.length}`);
 
     if (!features.length || !targets.length) {
-      throw new Error("❌ No sequences generated. Check historical data length.");
+      throw new Error("❌ No sequences generated. Check MTFA data length.");
     }
 
-    // ✅ Convert arrays into tensors with explicit shapes
-    try {
-      const featureTensor = tf.tensor3d(features, [features.length, this.lookback, 5]);
-      const targetTensor = tf.tensor2d(targets, [targets.length, this.horizon]);
-      return { features: featureTensor, targets: targetTensor };
-    } catch (err) {
-      console.error("❌ Tensor conversion error:", err.message);
-      console.error("Sample bad feature window:", features[0]);
-      console.error("Sample bad target window:", targets[0]);
-      throw err;
-    }
+    return {
+      features: tf.tensor3d(features, [features.length, this.lookback, 5]),
+      targets: tf.tensor2d(targets, [targets.length, this.horizon])
+    };
   }
 }
 
