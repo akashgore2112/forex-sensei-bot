@@ -1,12 +1,12 @@
 // ml-pipeline/models/lstm-predictor.js
-// 📘 LSTM Price Predictor (Phase 2 - Step 1.2)
+// 📘 LSTM Price Predictor (Phase 2 - Step 1.1 Final)
 
 const tf = require("@tensorflow/tfjs-node");
 
 class LSTMPricePredictor {
   constructor() {
     this.model = null;
-    this.lookbackPeriod = 60; // last 60 days data
+    this.lookbackPeriod = 60; // past 60 days
     this.predictionHorizon = 5; // predict next 5 days
   }
 
@@ -18,7 +18,7 @@ class LSTMPricePredictor {
       tf.layers.lstm({
         units: 50,
         returnSequences: true,
-        inputShape: [this.lookbackPeriod, 5] // 5 features: close, ema20, rsi, macd, atr
+        inputShape: [this.lookbackPeriod, 5] // features: close, ema20, rsi, macd, atr
       })
     );
 
@@ -49,12 +49,7 @@ class LSTMPricePredictor {
     const features = [];
     const targets = [];
 
-    for (
-      let i = this.lookbackPeriod;
-      i < historicalData.length - this.predictionHorizon;
-      i++
-    ) {
-      // Features: last 60 days window
+    for (let i = this.lookbackPeriod; i < historicalData.length - this.predictionHorizon; i++) {
       const featureWindow = [];
       for (let j = i - this.lookbackPeriod; j < i; j++) {
         featureWindow.push([
@@ -67,7 +62,6 @@ class LSTMPricePredictor {
       }
       features.push(featureWindow);
 
-      // Target: next 5 days close
       const targetWindow = [];
       for (let k = i + 1; k <= i + this.predictionHorizon; k++) {
         targetWindow.push(historicalData[k].close);
@@ -81,29 +75,8 @@ class LSTMPricePredictor {
     };
   }
 
-  // 🔹 Train the Model
-  async trainModel(historicalData) {
-    const { features, targets } = this.prepareTrainingData(historicalData);
-
-    await this.model.fit(features, targets, {
-      epochs: 50,
-      batchSize: 32,
-      validationSplit: 0.2,
-      callbacks: tf.callbacks.earlyStopping({ patience: 5 })
-    });
-
-    console.log("✅ LSTM Training Completed");
-
-    await this.model.save("file://./saved-models/lstm-model");
-    console.log("💾 Model Saved: ./saved-models/lstm-model");
-  }
-
-  // 🔹 Predict Next Prices
-  async predict(recentData) {
-    if (!this.model) {
-      throw new Error("Model not built or loaded. Call buildModel() first.");
-    }
-
+  // 🔹 Helper: Prepare input for prediction
+  prepareInputFeatures(recentData) {
     const inputFeatures = [
       recentData.slice(-this.lookbackPeriod).map(d => [
         d.close,
@@ -113,19 +86,66 @@ class LSTMPricePredictor {
         d.atr
       ])
     ];
+    return tf.tensor3d(inputFeatures);
+  }
 
-    const tensorInput = tf.tensor3d(inputFeatures);
+  // 🔹 Helper: Confidence Calculation
+  calculateConfidence(predictionTensor, lastClose) {
+    return predictionTensor.data().then(predictedArray => {
+      const lastPredicted = predictedArray[predictedArray.length - 1];
+      const error = Math.abs(lastPredicted - lastClose) / lastClose;
+      return Math.max(0, 1 - error); // higher = more confident
+    });
+  }
+
+  // 🔹 Helper: Determine Direction
+  determinePriceDirection(predictedArray, lastClose) {
+    const lastPredicted = predictedArray[predictedArray.length - 1];
+    return lastPredicted > lastClose ? "BULLISH" : "BEARISH";
+  }
+
+  // 🔹 Train the Model
+  async trainModel(historicalData) {
+    const { features, targets } = this.prepareTrainingData(historicalData);
+
+    await this.model.fit(features, targets, {
+      epochs: 100,
+      batchSize: 32,
+      validationSplit: 0.2,
+      callbacks: tf.callbacks.earlyStopping({ patience: 10 })
+    });
+
+    console.log("✅ LSTM Training Completed");
+
+    await this.model.save("file://./saved-models/lstm-price-predictor");
+    console.log("💾 Model Saved: ./saved-models/lstm-price-predictor");
+  }
+
+  // 🔹 Predict Next Prices
+  async predict(recentData) {
+    if (!this.model) {
+      throw new Error("Model not built or loaded. Call buildModel() first.");
+    }
+
+    const tensorInput = this.prepareInputFeatures(recentData);
     const prediction = this.model.predict(tensorInput);
-
     const predictedPrices = Array.from(await prediction.data());
+
+    const lastClose = recentData[recentData.length - 1].close;
+    const direction = this.determinePriceDirection(predictedPrices, lastClose);
+    const confidence = await this.calculateConfidence(prediction, lastClose);
+
+    // Volatility (ATR-based)
+    const avgAtr = recentData.slice(-this.lookbackPeriod).reduce((sum, d) => sum + (d.atr || 0), 0) / this.lookbackPeriod;
+    let volatility = "LOW";
+    if (avgAtr > 0.005) volatility = "MEDIUM";
+    if (avgAtr > 0.01) volatility = "HIGH";
 
     return {
       predictedPrices,
-      direction:
-        predictedPrices[predictedPrices.length - 1] >
-        recentData[recentData.length - 1].close
-          ? "BULLISH"
-          : "BEARISH"
+      confidence: Number(confidence.toFixed(2)),
+      direction,
+      volatility
     };
   }
 }
