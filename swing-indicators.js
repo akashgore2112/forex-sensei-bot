@@ -8,8 +8,18 @@ class SwingIndicators {
     const highs = data.map(d => d.high);
     const lows = data.map(d => d.low);
 
-    // Helper function: TA-Lib wrapper
-    const run = (name, params) => {
+    // Helper wrapper for indicators that return `outReal`
+    const runOutReal = (name, params) => {
+      return new Promise((resolve, reject) => {
+        talib.execute({ name, ...params }, (err, result) => {
+          if (err) return reject(err);
+          resolve(result.result.outReal || []); // Ensure we always get array
+        });
+      });
+    };
+
+    // Direct run for indicators with multiple outputs (MACD, BBANDS)
+    const runRaw = (name, params) => {
       return new Promise((resolve, reject) => {
         talib.execute({ name, ...params }, (err, result) => {
           if (err) return reject(err);
@@ -19,35 +29,35 @@ class SwingIndicators {
     };
 
     // ✅ Indicators with TA-Lib
-    const ema20 = await run("EMA", {
+    const ema20 = await runOutReal("EMA", {
       startIdx: 0,
       endIdx: closes.length - 1,
       inReal: closes,
       optInTimePeriod: 20
     });
 
-    const ema50 = await run("EMA", {
+    const ema50 = await runOutReal("EMA", {
       startIdx: 0,
       endIdx: closes.length - 1,
       inReal: closes,
       optInTimePeriod: 50
     });
 
-    const ema200 = await run("EMA", {
+    const ema200 = await runOutReal("EMA", {
       startIdx: 0,
       endIdx: closes.length - 1,
       inReal: closes,
       optInTimePeriod: 200
     });
 
-    const rsi14 = await run("RSI", {
+    const rsi14 = await runOutReal("RSI", {
       startIdx: 0,
       endIdx: closes.length - 1,
       inReal: closes,
       optInTimePeriod: 14
     });
 
-    const macd = await run("MACD", {
+    const macd = await runRaw("MACD", {
       startIdx: 0,
       endIdx: closes.length - 1,
       inReal: closes,
@@ -56,7 +66,7 @@ class SwingIndicators {
       optInSignalPeriod: 9
     });
 
-    const adx = await run("ADX", {
+    const adx = await runOutReal("ADX", {
       startIdx: 0,
       endIdx: closes.length - 1,
       high: highs,
@@ -65,7 +75,7 @@ class SwingIndicators {
       optInTimePeriod: 14
     });
 
-    const atr = await run("ATR", {
+    const atr = await runOutReal("ATR", {
       startIdx: 0,
       endIdx: closes.length - 1,
       high: highs,
@@ -74,20 +84,20 @@ class SwingIndicators {
       optInTimePeriod: 14
     });
 
-    const bollinger = await run("BBANDS", {
+    const bollinger = await runRaw("BBANDS", {
       startIdx: 0,
       endIdx: closes.length - 1,
       inReal: closes,
       optInTimePeriod: 20,
       optInNbDevUp: 2,
       optInNbDevDn: 2,
-      optInMAType: 0 // simple MA
+      optInMAType: 0 // SMA
     });
 
     // ✅ Support/Resistance logic
     const supportResistance = this.calculateSupportResistance(data);
 
-    // ✅ Final structured output (fixed last-value extraction)
+    // ✅ Final structured output
     return {
       ema20: ema20[ema20.length - 1],
       ema50: ema50[ema50.length - 1],
