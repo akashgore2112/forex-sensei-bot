@@ -37,15 +37,19 @@ async function testLSTMAccuracy() {
 
   // 4. Create training sequences
   const { features, targets } = preprocessor.createSequences(processed);
-  
+
+  // Convert to tensors
+  const featureTensor = tf.tensor3d(features); // shape: [samples, 60, 5]
+  const targetTensor = tf.tensor2d(targets);   // shape: [samples, 5]
+
   // Split 80/20
-  const splitIndex = Math.floor(features.shape[0] * 0.8);
+  const splitIndex = Math.floor(featureTensor.shape[0] * 0.8);
 
-  const trainX = features.slice([0, 0, 0], [splitIndex, 60, 5]);
-  const trainY = targets.slice([0, 0], [splitIndex, 5]);
+  const trainX = featureTensor.slice([0, 0, 0], [splitIndex, 60, 5]);
+  const trainY = targetTensor.slice([0, 0], [splitIndex, 5]);
 
-  const testX = features.slice([splitIndex, 0, 0], [features.shape[0] - splitIndex, 60, 5]);
-  const testY = targets.slice([splitIndex, 0], [targets.shape[0] - splitIndex, 5]);
+  const testX = featureTensor.slice([splitIndex, 0, 0], [featureTensor.shape[0] - splitIndex, 60, 5]);
+  const testY = targetTensor.slice([splitIndex, 0], [targetTensor.shape[0] - splitIndex, 5]);
 
   console.log(`📊 Train size: ${trainX.shape[0]} | Test size: ${testX.shape[0]}`);
 
