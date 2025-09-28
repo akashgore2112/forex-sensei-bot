@@ -1,38 +1,54 @@
 // test/test-ml-integration.js
-// 📊 Step 1.9 - Full Integration Test (Phase-1 + LSTM)
+// 📊 Step 1.9 - Real ML Integration Test (No Dummy Values)
 
-const MLIntegration = require("../ml-pipeline/ml-integration");
+const MLPipeline = require("../ml-pipeline/ml-integration");
+const SwingDataFetcher = require("../swingDataFetcher");
+const SwingIndicators = require("../swing-indicators");
+const tf = require("@tensorflow/tfjs-node");
 
-async function runIntegrationTest() {
-  console.log("🚀 Starting Step 1.9: ML Integration Test...");
+async function testMLIntegration() {
+  console.log("🚀 Starting Step 1.9: ML Integration with Real Data...");
 
-  const integration = new MLIntegration();
-  await integration.init();
+  const mlPipeline = new MLPipeline();
 
-  try {
-    // 1. Run prediction
-    const result = await integration.getPrediction("EUR/USD");
+  // 1. Fetch historical data
+  console.log("📊 Fetching EUR/USD candles...");
+  const candles = await SwingDataFetcher.getDailyData("EUR/USD");
+  console.log(`✅ Got ${candles.length} candles`);
 
-    // 2. Final Expected Format (Phase 2 Plan)
-    const output = {
-      predictedPrices: result.predictedPrices.map(p => Number(p.toFixed(6))),
-      confidence: result.confidence || 0.72, // fallback if model doesn’t return
-      direction: result.direction || "UNKNOWN",
-      volatility: result.volatility || "MEDIUM"
-    };
+  // 2. Calculate indicators
+  console.log("📈 Calculating indicators...");
+  const indicators = await SwingIndicators.calculateAll(candles);
 
-    // 3. Print nicely
-    console.log("\n🔮 Final Integrated Prediction (EUR/USD):");
-    console.log("------------------------------------------");
-    console.log("Predicted Prices (next 5 days):", output.predictedPrices);
-    console.log("Confidence:", (output.confidence * 100).toFixed(2) + "%");
-    console.log("Direction:", output.direction);
-    console.log("Volatility:", output.volatility);
+  // 3. Run ML predictions
+  console.log("🤖 Running ML pipeline...");
+  const result = await mlPipeline.generateMLPredictions("EUR/USD");
 
-    console.log("\n✅ Step 1.9 Completed Successfully with Expected Output!");
-  } catch (err) {
-    console.error("❌ Error in Integration Test:", err);
+  // === Post-process ===
+  // Confidence → LSTM model ke validation loss/MAE se (agar available ho)
+  if (result.ml.priceDirection?.mae !== undefined) {
+    const mae = result.ml.priceDirection.mae;
+    // Normalize confidence: lower MAE → higher confidence
+    result.ml.priceDirection.confidence = Math.max(0, 1 - mae / 0.01); 
   }
+
+  // Volatility → ATR ke base par
+  if (Array.isArray(indicators.atr)) {
+    const latestATR = indicators.atr[indicators.atr.length - 1];
+    if (latestATR < 0.005) {
+      result.ml.volatilityForecast = { level: "LOW", expectedRange: "20-40 pips" };
+    } else if (latestATR < 0.010) {
+      result.ml.volatilityForecast = { level: "MEDIUM", expectedRange: "40-80 pips" };
+    } else {
+      result.ml.volatilityForecast = { level: "HIGH", expectedRange: "80-150 pips" };
+    }
+  }
+
+  // 4. Print final result
+  console.log("\n📌 Final ML Integration Result:");
+  console.dir(result, { depth: null });
 }
 
-runIntegrationTest();
+testMLIntegration().catch((err) => {
+  console.error("❌ Error in ML Integration Test:", err);
+});
