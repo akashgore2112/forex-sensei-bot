@@ -54,11 +54,12 @@ async function verifyPhase1() {
   const cached = cache.load("EURUSD_DAILY");
   console.log("Cache Load Success:", !!cached);
 
-  if (fs.existsSync("stats.json")) {
-    const stats = JSON.parse(fs.readFileSync("stats.json", "utf-8"));
+  const statsFile = "cache/cache-stats.json";
+  if (fs.existsSync(statsFile)) {
+    const stats = JSON.parse(fs.readFileSync(statsFile, "utf-8"));
     console.log("📊 Cache/API Stats:", stats);
   } else {
-    console.warn("⚠️ stats.json missing, tracking may not be enabled");
+    console.warn("⚠️ cache/cache-stats.json missing, tracking may not be enabled");
   }
 
   // === 5. Final Result ===
