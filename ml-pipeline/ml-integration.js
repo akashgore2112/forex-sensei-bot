@@ -63,13 +63,23 @@ class MLPipeline {
     const predictedClose = predValues[0][predValues[0].length - 1];
     const direction = predictedClose > lastClose ? "BULLISH" : "BEARISH";
 
-    // ✅ Confidence calculation (percentage + levels)
-    const rawConfidence = Math.max(0, 1 - Math.abs(predictedClose - lastClose) / lastClose);
-    const confidencePct = (rawConfidence * 100).toFixed(2);
+    // ✅ Confidence calculation (improved)
+const relativeDiff = Math.abs(predictedClose - lastClose) / lastClose;
 
-    let confidenceLevel = "LOW";
-    if (confidencePct > 60) confidenceLevel = "MEDIUM";
-    if (confidencePct > 80) confidenceLevel = "HIGH";
+// Agar model ke paas validation MAE stored hai (training se), use karenge
+// Filhal relativeDiff ko normalize kar dete hain
+let rawConfidence = 1 - relativeDiff;
+
+// Range 0-1 me clamp
+rawConfidence = Math.max(0, Math.min(1, rawConfidence));
+
+// Percent me convert
+const confidencePercent = (rawConfidence * 100).toFixed(2);
+
+// Confidence Level buckets
+let confidenceLevel = "LOW";
+if (rawConfidence > 0.33) confidenceLevel = "MEDIUM";
+if (rawConfidence > 0.66) confidenceLevel = "HIGH";
 
     // ✅ Volatility from ATR
     const avgAtr =
