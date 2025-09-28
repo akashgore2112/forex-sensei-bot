@@ -1,14 +1,9 @@
 // ml-pipeline/models/random-forest-classifier.js
-// 📘 Random Forest Classifier (Phase 2 - Step 1.2)
-// Goal: Generate BUY / SELL / HOLD signals using MTFA features
-
 const { RandomForestClassifier } = require("ml-random-forest");
 
 class SwingSignalClassifier {
   constructor() {
     this.model = null;
-
-    // Feature set for signal classification
     this.features = [
       "ema_trend",
       "rsi_level",
@@ -20,60 +15,24 @@ class SwingSignalClassifier {
     ];
   }
 
-  // 🔹 Feature Engineering Helpers
-  calculateEMATrend(marketData) {
-    if (!marketData.ema20 || !marketData.ema50 || !marketData.ema200) return 0;
-    if (marketData.ema20 > marketData.ema50 && marketData.ema50 > marketData.ema200) return 1; // bullish
-    if (marketData.ema20 < marketData.ema50 && marketData.ema50 < marketData.ema200) return -1; // bearish
-    return 0; // neutral
+  // ✅ NaN-safe number parser
+  safeNumber(v) {
+    if (v === null || v === undefined || isNaN(v)) return 0;
+    return Number(v);
   }
 
-  normalizeRSI(rsi) {
-    if (rsi == null) return 0.5;
-    return Math.min(1, Math.max(0, rsi / 100)); // scale 0–1
-  }
-
-  getMACDSignal(macd) {
-    if (!macd || macd.macd == null || macd.signal == null) return 0;
-    return macd.macd > macd.signal ? 1 : -1;
-  }
-
-  normalizeATR(atr) {
-    if (!atr || atr <= 0) return 0;
-    return Math.min(1, atr / 0.05); // ATR normalized (assume 5% as high volatility)
-  }
-
-  getPricePosition(marketData) {
-    if (!marketData.bollinger) return 0.5;
-    const { upper, lower } = marketData.bollinger;
-    if (!upper || !lower) return 0.5;
-    return (marketData.close - lower) / (upper - lower); // 0=low band, 1=upper band
-  }
-
-  calculateMomentum(marketData) {
-    if (!marketData.close || !marketData.prevClose) return 0;
-    return (marketData.close - marketData.prevClose) / marketData.prevClose;
-  }
-
-  getVolumeTrend(marketData) {
-    if (!marketData.volume || !marketData.avgVolume) return 0;
-    return marketData.volume > marketData.avgVolume ? 1 : -1;
-  }
-
-  // 🔹 Prepare Feature Vector
   prepareFeatures(marketData) {
     return {
-      ema_trend: this.calculateEMATrend(marketData),
-      rsi_level: this.normalizeRSI(marketData.rsi14),
-      macd_signal: this.getMACDSignal(marketData.macd),
-      atr_volatility: this.normalizeATR(marketData.atr),
-      price_position: this.getPricePosition(marketData),
-      momentum_strength: this.calculateMomentum(marketData),
-      volume_trend: this.getVolumeTrend(marketData),
+      ema_trend: this.safeNumber(this.calculateEMATrend(marketData)),
+      rsi_level: this.safeNumber(this.normalizeRSI(marketData.rsi)),
+      macd_signal: this.safeNumber(this.getMACDSignal(marketData.macd)),
+      atr_volatility: this.safeNumber(this.normalizeATR(marketData.atr)),
+      price_position: this.safeNumber(this.getPricePosition(marketData)),
+      momentum_strength: this.safeNumber(this.calculateMomentum(marketData)),
+      volume_trend: this.safeNumber(this.getVolumeTrend(marketData)),
     };
   }
 
-  // 🔹 Train Model on Historical Data
   async trainModel(historicalData) {
     const trainingData = [];
     const labels = [];
@@ -82,9 +41,12 @@ class SwingSignalClassifier {
       const currentData = historicalData[i];
       const features = this.prepareFeatures(currentData);
 
-      // Lookahead 5 days for signal label
-      const futurePrice = historicalData[i + 5].close;
+      // Look ahead 5 days for price movement
+      const futurePrice = historicalData[i + 5]?.close;
       const currentPrice = currentData.close;
+
+      if (!futurePrice || !currentPrice) continue; // skip invalid data
+
       const priceChange = (futurePrice - currentPrice) / currentPrice;
 
       let label;
@@ -96,6 +58,15 @@ class SwingSignalClassifier {
       labels.push(label);
     }
 
+    // ✅ Guard clause
+    if (!trainingData.length || !labels.length) {
+      throw new Error("❌ No valid training data for Random Forest.");
+    }
+
+    console.log(
+      `📊 Training Random Forest → Samples: ${trainingData.length}, Features: ${this.features.length}`
+    );
+
     this.model = new RandomForestClassifier({
       nEstimators: 100,
       maxFeatures: 0.8,
@@ -104,19 +75,20 @@ class SwingSignalClassifier {
     });
 
     this.model.train(trainingData, labels);
-    console.log("✅ Random Forest Classifier Trained Successfully");
+    console.log("✅ Random Forest Training Completed!");
   }
 
-  // 🔹 Predict Signal for Current Market Data
   predict(currentData) {
-    if (!this.model) throw new Error("❌ Model not trained yet!");
+    if (!this.model) throw new Error("❌ Model not trained.");
 
     const features = this.prepareFeatures(currentData);
-    const prediction = this.model.predict([Object.values(features)]);
-    const probabilities = this.model.predictProba([Object.values(features)]);
+    const featureArray = [Object.values(features)];
+
+    const prediction = this.model.predict(featureArray);
+    const probabilities = this.model.predictProba(featureArray);
 
     return {
-      signal: prediction[0], // BUY/SELL/HOLD
+      signal: prediction[0],
       confidence: Math.max(...probabilities[0]),
       probabilities: {
         BUY: probabilities[0][0],
@@ -124,6 +96,29 @@ class SwingSignalClassifier {
         HOLD: probabilities[0][2],
       },
     };
+  }
+
+  // 🟢 Placeholder methods (implement properly later)
+  calculateEMATrend(data) {
+    return data.ema20 > data.ema50 ? 1 : -1;
+  }
+  normalizeRSI(rsi) {
+    return rsi / 100;
+  }
+  getMACDSignal(macd) {
+    return macd?.macd - macd?.signal || 0;
+  }
+  normalizeATR(atr) {
+    return atr || 0;
+  }
+  getPricePosition(data) {
+    return data.close / (data.ema20 || 1);
+  }
+  calculateMomentum(data) {
+    return (data.close - (data.prevClose || data.close)) / (data.prevClose || 1);
+  }
+  getVolumeTrend(data) {
+    return data.volume ? data.volume / (data.avgVolume || data.volume) : 0;
   }
 }
 
