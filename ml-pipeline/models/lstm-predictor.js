@@ -42,7 +42,7 @@ class LSTMPricePredictor {
 
   // 🔹 Prepare Training Data with Normalization
   prepareTrainingData(historicalData) {
-    // Normalize first
+    // ✅ Fix: normalizeDataset function correctly called
     const normalized = this.normalizer.normalizeDataset(historicalData);
 
     const features = [];
@@ -69,8 +69,8 @@ class LSTMPricePredictor {
     }
 
     return {
-      features: tf.tensor3d(features),
-      targets: tf.tensor2d(targets),
+      features: tf.tensor3d(features, [features.length, this.lookbackPeriod, 5]),
+      targets: tf.tensor2d(targets, [targets.length, this.predictionHorizon]),
     };
   }
 
@@ -86,15 +86,15 @@ class LSTMPricePredictor {
         d.atr,
       ]),
     ];
-    return tf.tensor3d(inputFeatures);
+    return tf.tensor3d(inputFeatures, [1, this.lookbackPeriod, 5]);
   }
 
   // 🔹 Confidence Calculation
   async calculateConfidence(predictionTensor, lastClose) {
-    const predictedArray = await predictionTensor.data();
+    const predictedArray = Array.from(await predictionTensor.data());
     const predictedPrices = predictedArray.map((p) =>
       this.normalizer.inverseTransformClose(p)
-    ); // inverse transform
+    );
 
     const lastPredicted = predictedPrices[predictedPrices.length - 1];
     const error = Math.abs(lastPredicted - lastClose) / lastClose;
