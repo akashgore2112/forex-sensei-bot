@@ -1,55 +1,49 @@
 // ml-pipeline/ml-integration.js
-// 🔗 Step 1.9: Integration of Phase 1 (MTFA) + Phase 2 (LSTM ML)
-
 const LSTMPricePredictor = require("./models/lstm-predictor");
 const DataPreprocessor = require("./training/data-preprocessor");
-const tf = require("@tensorflow/tfjs-node");
+const SwingDataFetcher = require("../swingDataFetcher");
+const SwingIndicators = require("../swing-indicators");
 
 class MLIntegration {
   constructor() {
     this.predictor = new LSTMPricePredictor();
-    this.preprocessor = new DataPreprocessor(60, 5); // 60-day lookback, 5-day horizon
-    this.modelLoaded = false;
+    this.preprocessor = new DataPreprocessor(60, 5);
   }
 
-  async loadModel() {
-    if (!this.modelLoaded) {
-      this.predictor.model = await tf.loadLayersModel("file://./saved-models/lstm-model/model.json");
-      this.modelLoaded = true;
-      console.log("✅ LSTM Model Loaded for Integration");
-    }
+  async init() {
+    console.log("⚡ Loading LSTM model...");
+    this.predictor.model = await this.predictor.loadModel("file://./saved-models/lstm-model");
+    console.log("✅ Model Loaded");
   }
 
-  /**
-   * Integrates MTFA + ML
-   * @param {Object} mtfaOutput - Phase 1 system ka output
-   * @param {Array} recentCandles - last 60 candles with indicators
-   */
-  async integrate(mtfaOutput, recentCandles) {
-    await this.loadModel();
+  async getPrediction(pair = "EUR/USD") {
+    console.log(`📊 Fetching real candles for ${pair}...`);
+    const candles = await SwingDataFetcher.getDailyData(pair);
 
-    // Process data for ML input
-    const { features } = this.preprocessor.createSequences(recentCandles);
+    console.log(`✅ Got ${candles.length} candles`);
 
-    if (features.shape[0] === 0) {
-      throw new Error("❌ Not enough candles to create ML sequences!");
-    }
+    // Add indicators
+    const indicators = await SwingIndicators.calculateAll(candles);
 
-    // Take only the last sequence
-    const lastSequence = features.slice([features.shape[0] - 1, 0, 0], [1, 60, 5]);
+    // Merge candles + indicators
+    const processed = candles.map((c, i) => ({
+      close: c.close,
+      ema20: indicators.ema20[i],
+      rsi: indicators.rsi14[i],
+      macd: indicators.macd.MACD[i],
+      atr: indicators.atr[i],
+    }));
 
-    const prediction = await this.predictor.model.predict(lastSequence).array();
+    // Last 70 candles only (to create 60-lookback window + 5 horizon)
+    const recent = processed.slice(-70);
 
-    return {
-      mtfa: mtfaOutput, // ✅ Phase 1 output
-      ml: {
-        predictedPrices: prediction[0],
-        direction:
-          prediction[0][prediction[0].length - 1] > prediction[0][0]
-            ? "BULLISH"
-            : "BEARISH",
-      },
-    };
+    // Convert into ML sequences
+    const { features } = this.preprocessor.createSequences(recent);
+
+    // Run prediction
+    const prediction = await this.predictor.model.predict(features.slice([0, 0, 0], [1, 60, 5])).array();
+
+    return prediction[0];
   }
 }
 
