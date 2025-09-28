@@ -3,6 +3,7 @@
 
 const SwingDataFetcher = require("../../swingDataFetcher");
 const SwingIndicators = require("../../swing-indicators");
+const tf = require("@tensorflow/tfjs-node"); // ✅ TensorFlow import add kiya
 
 class DataPreprocessor {
   constructor(lookback = 60, horizon = 5) {
@@ -41,7 +42,7 @@ class DataPreprocessor {
   }
 
   /**
-   * Convert processed data into LSTM-friendly sequences
+   * Convert processed data into LSTM-friendly sequences (returns Tensors)
    */
   createSequences(historicalData) {
     const features = [];
@@ -67,7 +68,11 @@ class DataPreprocessor {
       targets.push(targetWindow);
     }
 
-    return { features, targets };
+    // ✅ Convert arrays into tensors
+    const featureTensor = tf.tensor3d(features); // [samples, lookback, 5]
+    const targetTensor = tf.tensor2d(targets);   // [samples, horizon]
+
+    return { features: featureTensor, targets: targetTensor };
   }
 }
 
