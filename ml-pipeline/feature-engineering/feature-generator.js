@@ -41,7 +41,7 @@ class FeatureGenerator {
   // Momentum Features
   // =========================
   generateMomentumFeatures(indicators) {
-    const rsi = indicators?.rsi ?? 50;
+    const rsi = indicators?.rsi14 ?? 50;  // 👈 rename fix
     const macdHist = indicators?.macd?.histogram ?? 0;
 
     return {
