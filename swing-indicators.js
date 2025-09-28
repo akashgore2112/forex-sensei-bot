@@ -87,23 +87,23 @@ class SwingIndicators {
     // ✅ Support/Resistance logic
     const supportResistance = this.calculateSupportResistance(data);
 
-    // ✅ Final structured output
+    // ✅ Final structured output (fixed last-value extraction)
     return {
-      ema20: ema20.pop(),
-      ema50: ema50.pop(),
-      ema200: ema200.pop(),
-      rsi14: rsi14.pop(),
+      ema20: ema20[ema20.length - 1],
+      ema50: ema50[ema50.length - 1],
+      ema200: ema200[ema200.length - 1],
+      rsi14: rsi14[rsi14.length - 1],
       macd: {
-        macd: macd.outMACD.pop(),
-        signal: macd.outMACDSignal.pop(),
-        histogram: macd.outMACDHist.pop()
+        macd: macd.outMACD[macd.outMACD.length - 1],
+        signal: macd.outMACDSignal[macd.outMACDSignal.length - 1],
+        histogram: macd.outMACDHist[macd.outMACDHist.length - 1]
       },
-      adx: adx.pop(),
-      atr: atr.pop(),
+      adx: adx[adx.length - 1],
+      atr: atr[atr.length - 1],
       bollinger: {
-        upper: bollinger.outRealUpperBand.pop(),
-        middle: bollinger.outRealMiddleBand.pop(),
-        lower: bollinger.outRealLowerBand.pop()
+        upper: bollinger.outRealUpperBand[bollinger.outRealUpperBand.length - 1],
+        middle: bollinger.outRealMiddleBand[bollinger.outRealMiddleBand.length - 1],
+        lower: bollinger.outRealLowerBand[bollinger.outRealLowerBand.length - 1]
       },
       supportResistance
     };
