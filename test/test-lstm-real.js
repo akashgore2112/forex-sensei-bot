@@ -25,24 +25,30 @@ async function runRealLSTMTest() {
 
   // 3. Merge into processed data
   const processed = candles.map((c, i) => ({
-  close: c.close,
-  ema20: Array.isArray(indicators.ema20) ? indicators.ema20[i] : indicators.ema20,
-  rsi: Array.isArray(indicators.rsi14) ? indicators.rsi14[i] : indicators.rsi14,
-  macd: Array.isArray(indicators.macd.macd) ? indicators.macd.macd[i] : indicators.macd.macd,
-  atr: Array.isArray(indicators.atr) ? indicators.atr[i] : indicators.atr
-}));
+    close: c.close,
+    ema20: Array.isArray(indicators.ema20) ? indicators.ema20[i] : indicators.ema20,
+    rsi: Array.isArray(indicators.rsi14) ? indicators.rsi14[i] : indicators.rsi14,
+    macd: indicators.macd && Array.isArray(indicators.macd.MACD)
+      ? indicators.macd.MACD[i]
+      : indicators.macd?.MACD || 0,
+    atr: Array.isArray(indicators.atr) ? indicators.atr[i] : indicators.atr
+  }));
 
   console.log(`✅ Processed ${processed.length} candles with indicators`);
 
   // 4. Convert into training sequences
-  const { features, targets } = preprocessor.prepareTrainingData(processed);
+  const { features, targets } = preprocessor.createSequences(processed);
 
-  console.log("📊 Features shape:", features.shape);
-  console.log("🎯 Targets shape:", targets.shape);
+  console.log("📊 Features length:", features.length);
+  console.log("🎯 Targets length:", targets.length);
+
+  // Convert to tensors
+  const featureTensor = tf.tensor3d(features);
+  const targetTensor = tf.tensor2d(targets);
 
   // 5. Train model
   console.log("⚡ Training LSTM on real forex data...");
-  await predictor.model.fit(features, targets, {
+  await predictor.model.fit(featureTensor, targetTensor, {
     epochs: 50,
     batchSize: 32,
     validationSplit: 0.2,
