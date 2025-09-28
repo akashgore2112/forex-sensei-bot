@@ -25,10 +25,10 @@ class MTFA {
         return null;
       }
 
-      // ✅ Calculate indicators for each timeframe
-      const dailyIndicators = SwingIndicators.calculateAll(daily);
-      const weeklyIndicators = SwingIndicators.calculateAll(weekly);
-      const monthlyIndicators = SwingIndicators.calculateAll(monthly);
+      // ✅ Calculate indicators for each timeframe (async with TA-Lib)
+      const dailyIndicators = await SwingIndicators.calculateAll(daily);
+      const weeklyIndicators = await SwingIndicators.calculateAll(weekly);
+      const monthlyIndicators = await SwingIndicators.calculateAll(monthly);
 
       // ✅ Get bias for each timeframe
       const dailyBias = this.getBias(dailyIndicators);
