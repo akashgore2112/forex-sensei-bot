@@ -1,5 +1,5 @@
 // test/test-ml-integration.js
-// 📊 Step 1.9 - Real ML Integration Test (Enhanced Output)
+// 📊 Step 1.9 - Real ML Integration Test (Final Enhanced Version)
 
 const MLPipeline = require("../ml-pipeline/ml-integration");
 const SwingDataFetcher = require("../swingDataFetcher");
@@ -24,8 +24,9 @@ async function testMLIntegration() {
   const result = await mlPipeline.generateMLPredictions("EUR/USD");
 
   // === Post-process Enhancements ===
+  console.log("🔧 Enhancing raw ML output...");
 
-  // ✅ Confidence Level (already percentage from ml-integration)
+  // ✅ Confidence Level
   if (result.ml.signalClassification?.confidence) {
     const conf = parseFloat(result.ml.signalClassification.confidence.replace("%", ""));
     let confidenceLevel = "LOW";
@@ -47,7 +48,10 @@ async function testMLIntegration() {
     }
   }
 
-  // 4. Print final result
+  // ✅ Add timestamp for tracking
+  result.timestamp = new Date().toISOString();
+
+  // 4. Print final structured result
   console.log("\n📌 Final ML Integration Result:");
   console.dir(result, { depth: null });
 }
