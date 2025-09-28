@@ -1,89 +1,65 @@
 // test/test-lstm-accuracy.js
-// 📊 Step 1.8 - Accuracy Evaluation of LSTM Model (Fixed + Debug)
+// 📊 Step 1.8 - Accuracy Evaluation of Saved LSTM Model
 
-const LSTMPricePredictor = require("../ml-pipeline/models/lstm-predictor");
+const tf = require("@tensorflow/tfjs-node");
 const DataPreprocessor = require("../ml-pipeline/training/data-preprocessor");
 const SwingDataFetcher = require("../swingDataFetcher");
 const SwingIndicators = require("../swing-indicators");
-const tf = require("@tensorflow/tfjs-node");
 
 async function testLSTMAccuracy() {
-  console.log("🚀 Starting Step 1.8: Accuracy Evaluation...");
+  console.log("🚀 Starting Step 1.8: Accuracy Evaluation (Saved Model)...");
 
-  const predictor = new LSTMPricePredictor();
-  await predictor.buildModel();
+  // 1. Load saved model
+  console.log("📂 Loading saved model...");
+  const model = await tf.loadLayersModel("file://./saved-models/lstm-model/model.json");
+  console.log("✅ Model loaded successfully!");
 
-  const preprocessor = new DataPreprocessor(60, 5); // 60-day lookback, 5-day horizon
+  const preprocessor = new DataPreprocessor(60, 5);
 
-  // 1. Fetch historical data
+  // 2. Fetch data
   console.log("📊 Fetching EUR/USD candles...");
   const candles = await SwingDataFetcher.getDailyData("EUR/USD");
   console.log(`✅ Got ${candles.length} candles`);
 
-  // 2. Add indicators
+  // 3. Add indicators
   console.log("📈 Calculating indicators...");
   const indicators = await SwingIndicators.calculateAll(candles);
 
-  // 3. Process data into features
   const processed = candles.map((c, i) => ({
-    close: Number.isFinite(c.close) ? c.close : 0,
-    ema20: Array.isArray(indicators.ema20) ? indicators.ema20[i] : indicators.ema20 || 0,
-    rsi: Array.isArray(indicators.rsi14) ? indicators.rsi14[i] : indicators.rsi14 || 0,
-    macd: Array.isArray(indicators.macd.MACD) ? indicators.macd.MACD[i] : indicators.macd.MACD || 0,
-    atr: Array.isArray(indicators.atr) ? indicators.atr[i] : indicators.atr || 0,
+    close: c.close,
+    ema20: Array.isArray(indicators.ema20) ? indicators.ema20[i] : indicators.ema20,
+    rsi: Array.isArray(indicators.rsi14) ? indicators.rsi14[i] : indicators.rsi14,
+    macd: Array.isArray(indicators.macd.MACD) ? indicators.macd.MACD[i] : indicators.macd.MACD,
+    atr: Array.isArray(indicators.atr) ? indicators.atr[i] : indicators.atr,
   }));
 
   console.log(`✅ Processed ${processed.length} candles with indicators`);
 
-  // 4. Create training sequences (already tensors returned)
+  // 4. Sequences
   const { features, targets } = preprocessor.createSequences(processed);
 
-  console.log("🛠 DEBUG Shapes:");
-  console.log("Features:", features.shape);
-  console.log("Targets:", targets.shape);
-
-  // Split 80/20
   const splitIndex = Math.floor(features.shape[0] * 0.8);
-
-  const trainX = features.slice([0, 0, 0], [splitIndex, 60, 5]);
-  const trainY = targets.slice([0, 0], [splitIndex, 5]);
-
   const testX = features.slice([splitIndex, 0, 0], [features.shape[0] - splitIndex, 60, 5]);
   const testY = targets.slice([splitIndex, 0], [targets.shape[0] - splitIndex, 5]);
 
-  console.log(`📊 Train size: ${trainX.shape[0]} | Test size: ${testX.shape[0]}`);
+  console.log(`📊 Test size: ${testX.shape[0]}`);
 
-  // 5. Train model
-  console.log("⚡ Training LSTM...");
-  await predictor.model.fit(trainX, trainY, {
-    epochs: 20,
-    batchSize: 32,
-    validationSplit: 0.1,
-    callbacks: tf.callbacks.earlyStopping({ patience: 3 }),
-  });
-
-  console.log("✅ Training Complete!");
-
-  // 6. Evaluate accuracy
-  console.log("📊 Evaluating on test data...");
-  const predictions = predictor.model.predict(testX);
+  // 5. Predictions
+  console.log("🔮 Running predictions with saved model...");
+  const predictions = model.predict(testX);
   const predValues = await predictions.array();
   const trueValues = await testY.array();
 
-  console.log("🛠 DEBUG First Prediction:", predValues[0]);
-  console.log("🛠 DEBUG First Target:", trueValues[0]);
-
-  // Calculate Metrics
+  // 6. Metrics
   let mse = 0, mae = 0, correctDir = 0;
 
   for (let i = 0; i < predValues.length; i++) {
-    const predLast = predValues[i][predValues[i].length - 1]; // predicted last day
-    const trueLast = trueValues[i][trueValues[i].length - 1]; // actual last day
+    const predLast = predValues[i][predValues[i].length - 1];
+    const trueLast = trueValues[i][trueValues[i].length - 1];
 
     mse += Math.pow(predLast - trueLast, 2);
     mae += Math.abs(predLast - trueLast);
 
-    // Direction check
     const prevTrue = trueValues[i][0];
     const actualDir = trueLast > prevTrue ? "UP" : "DOWN";
     const predDir = predLast > prevTrue ? "UP" : "DOWN";
@@ -100,7 +76,7 @@ async function testLSTMAccuracy() {
   console.log(`MAE: ${mae.toFixed(6)}`);
   console.log(`Direction Accuracy: ${dirAcc.toFixed(2)}%`);
 
-  console.log("\n🎯 Step 1.8 Accuracy Evaluation Completed!");
+  console.log("\n🎯 Step 1.8 Accuracy Evaluation Completed (Saved Model)!");
 }
 
 testLSTMAccuracy().catch((err) => {
