@@ -1,133 +1,172 @@
 const talib = require("talib");
 
 class SwingIndicators {
-  static async runIndicator(name, inputs) {
-    return new Promise((resolve, reject) => {
-      talib.execute(
-        {
-          name,
-          startIdx: 0,
-          endIdx: inputs.close.length - 1,
-          ...inputs,
-        },
-        (err, result) => {
-          if (err) return reject(err);
-          if (!result || !result.result) return resolve(null);
-
-          // Take last value (most recent)
-          const values =
-            result.result.outReal ||
-            result.result.outMACD ||
-            result.result.outADX ||
-            result.result.outATR ||
-            result.result.outRealUpperBand;
-          resolve(values ? values[values.length - 1] : null);
-        }
-      );
-    });
-  }
-
   static async calculateAll(data) {
     if (!data || data.length === 0) return {};
 
-    const closes = data.map((d) => d.close);
-    const highs = data.map((d) => d.high);
-    const lows = data.map((d) => d.low);
+    const closes = data.map(d => d.close);
+    const highs = data.map(d => d.high);
+    const lows = data.map(d => d.low);
 
-    const ema20 = await this.runIndicator("EMA", { inReal: closes, optInTimePeriod: 20, close: closes });
-    const ema50 = await this.runIndicator("EMA", { inReal: closes, optInTimePeriod: 50, close: closes });
-    const ema200 = await this.runIndicator("EMA", { inReal: closes, optInTimePeriod: 200, close: closes });
-    const rsi14 = await this.runIndicator("RSI", { inReal: closes, optInTimePeriod: 14, close: closes });
-    const macd = await new Promise((resolve, reject) => {
-      talib.execute(
-        {
-          name: "MACD",
-          startIdx: 0,
-          endIdx: closes.length - 1,
-          inReal: closes,
-          optInFastPeriod: 12,
-          optInSlowPeriod: 26,
-          optInSignalPeriod: 9,
-        },
-        (err, result) => {
+    // Helper function: TA-Lib wrapper
+    const run = (name, params) => {
+      return new Promise((resolve, reject) => {
+        talib.execute({ name, ...params }, (err, result) => {
           if (err) return reject(err);
-          resolve({
-            macd: result.result.outMACD.slice(-1)[0],
-            signal: result.result.outMACDSignal.slice(-1)[0],
-            histogram: result.result.outMACDHist.slice(-1)[0],
-          });
-        }
-      );
+          resolve(result.result);
+        });
+      });
+    };
+
+    // ✅ Indicators with TA-Lib
+    const ema20 = await run("EMA", {
+      startIdx: 0,
+      endIdx: closes.length - 1,
+      inReal: closes,
+      optInTimePeriod: 20
     });
 
-    // Extra indicators (ADX, ATR, Bollinger)
-    const adx = await this.runIndicator("ADX", { high: highs, low: lows, close: closes, optInTimePeriod: 14 });
-    const atr = await this.runIndicator("ATR", { high: highs, low: lows, close: closes, optInTimePeriod: 14 });
-    const bollinger = await new Promise((resolve, reject) => {
-      talib.execute(
-        {
-          name: "BBANDS",
-          startIdx: 0,
-          endIdx: closes.length - 1,
-          inReal: closes,
-          optInTimePeriod: 20,
-          optInNbDevUp: 2,
-          optInNbDevDn: 2,
-          optInMAType: 0,
-        },
-        (err, result) => {
-          if (err) return reject(err);
-          resolve({
-            upper: result.result.outRealUpperBand.slice(-1)[0],
-            middle: result.result.outRealMiddleBand.slice(-1)[0],
-            lower: result.result.outRealLowerBand.slice(-1)[0],
-          });
-        }
-      );
+    const ema50 = await run("EMA", {
+      startIdx: 0,
+      endIdx: closes.length - 1,
+      inReal: closes,
+      optInTimePeriod: 50
     });
 
+    const ema200 = await run("EMA", {
+      startIdx: 0,
+      endIdx: closes.length - 1,
+      inReal: closes,
+      optInTimePeriod: 200
+    });
+
+    const rsi14 = await run("RSI", {
+      startIdx: 0,
+      endIdx: closes.length - 1,
+      inReal: closes,
+      optInTimePeriod: 14
+    });
+
+    const macd = await run("MACD", {
+      startIdx: 0,
+      endIdx: closes.length - 1,
+      inReal: closes,
+      optInFastPeriod: 12,
+      optInSlowPeriod: 26,
+      optInSignalPeriod: 9
+    });
+
+    const adx = await run("ADX", {
+      startIdx: 0,
+      endIdx: closes.length - 1,
+      high: highs,
+      low: lows,
+      close: closes,
+      optInTimePeriod: 14
+    });
+
+    const atr = await run("ATR", {
+      startIdx: 0,
+      endIdx: closes.length - 1,
+      high: highs,
+      low: lows,
+      close: closes,
+      optInTimePeriod: 14
+    });
+
+    const bollinger = await run("BBANDS", {
+      startIdx: 0,
+      endIdx: closes.length - 1,
+      inReal: closes,
+      optInTimePeriod: 20,
+      optInNbDevUp: 2,
+      optInNbDevDn: 2,
+      optInMAType: 0 // simple MA
+    });
+
+    // ✅ Support/Resistance logic
     const supportResistance = this.calculateSupportResistance(data);
 
+    // ✅ Final structured output
     return {
-      ema20,
-      ema50,
-      ema200,
-      rsi14,
-      macd,
-      adx,
-      atr,
-      bollinger,
-      supportResistance,
+      ema20: ema20.pop(),
+      ema50: ema50.pop(),
+      ema200: ema200.pop(),
+      rsi14: rsi14.pop(),
+      macd: {
+        macd: macd.outMACD.pop(),
+        signal: macd.outMACDSignal.pop(),
+        histogram: macd.outMACDHist.pop()
+      },
+      adx: adx.pop(),
+      atr: atr.pop(),
+      bollinger: {
+        upper: bollinger.outRealUpperBand.pop(),
+        middle: bollinger.outRealMiddleBand.pop(),
+        lower: bollinger.outRealLowerBand.pop()
+      },
+      supportResistance
     };
   }
 
-  // 🔍 support/resistance same jaise pehle tha
+  // 🔍 Advanced Support/Resistance Logic
   static calculateSupportResistance(data, lookback = 50) {
-    const highs = data.map((d) => d.high);
-    const lows = data.map((d) => d.low);
+    const highs = data.map(d => d.high);
+    const lows = data.map(d => d.low);
     const recentData = data.slice(-lookback);
 
-    let support = [];
-    let resistance = [];
+    let supportLevels = [];
+    let resistanceLevels = [];
 
     for (let i = 2; i < recentData.length - 2; i++) {
-      if (
-        recentData[i].low < recentData[i - 2].low &&
-        recentData[i].low < recentData[i + 2].low
-      ) {
-        support.push(recentData[i].low);
+      const prevLow = recentData[i - 2].low;
+      const currLow = recentData[i].low;
+      const nextLow = recentData[i + 2].low;
+
+      const prevHigh = recentData[i - 2].high;
+      const currHigh = recentData[i].high;
+      const nextHigh = recentData[i + 2].high;
+
+      if (currLow < prevLow && currLow < nextLow) {
+        supportLevels.push(currLow);
       }
-      if (
-        recentData[i].high > recentData[i - 2].high &&
-        recentData[i].high > recentData[i + 2].high
-      ) {
-        resistance.push(recentData[i].high);
+      if (currHigh > prevHigh && currHigh > nextHigh) {
+        resistanceLevels.push(currHigh);
       }
     }
 
+    const countTouches = (level, arr, tolerance = 0.001) =>
+      arr.filter(v => Math.abs(v - level) / level < tolerance).length;
+
+    const uniqueSupports = [...new Set(supportLevels)]
+      .map(level => ({
+        level,
+        touches: countTouches(level, lows),
+        strength:
+          countTouches(level, lows) >= 3
+            ? "STRONG"
+            : countTouches(level, lows) === 2
+            ? "MEDIUM"
+            : "WEAK"
+      }))
+      .sort((a, b) => a.level - b.level);
+
+    const uniqueResistances = [...new Set(resistanceLevels)]
+      .map(level => ({
+        level,
+        touches: countTouches(level, highs),
+        strength:
+          countTouches(level, highs) >= 3
+            ? "STRONG"
+            : countTouches(level, highs) === 2
+            ? "MEDIUM"
+            : "WEAK"
+      }))
+      .sort((a, b) => a.level - b.level);
+
     return {
-      support: support.slice(-3),
-      resistance: resistance.slice(-3),
+      support: uniqueSupports.slice(-3),
+      resistance: uniqueResistances.slice(0, 3)
     };
   }
 }
