@@ -9,11 +9,19 @@ const FeatureGenerator = require('../ml-pipeline/feature-engineering/feature-gen
     console.log("\n=== RAW MTFA OUTPUT ===");
     console.log(JSON.stringify(mtfaData, null, 2));
 
-    // ✅ Indicators + raw OHLC candles dono extract karte hain
-    const marketData = mtfaData.daily?.rawData || [];   // OHLC candles (close, high, low etc.)
-    const indicators = mtfaData.daily || {};            // EMA, RSI, MACD, ATR, Bollinger, S/R
+    // ✅ Debug 1: dekhte hain candles ke structure
+    if (mtfaData.daily?.rawData) {
+      console.log("\n=== Last 5 Daily Candles ===");
+      console.log(mtfaData.daily.rawData.slice(-5));   // 👈 yeh chahiye mujhe
+    }
 
-    // ✅ Feature Generator call
+    // ✅ Debug 2: daily object ke andar kya keys hain
+    console.log("\n=== Keys inside mtfaData.daily ===");
+    console.log(Object.keys(mtfaData.daily));          // 👈 yeh bhi chahiye mujhe
+
+    const marketData = mtfaData.daily?.rawData || [];
+    const indicators = mtfaData.daily || {};
+
     const fg = new FeatureGenerator();
     const features = fg.generateAllFeatures(marketData, indicators);
 
