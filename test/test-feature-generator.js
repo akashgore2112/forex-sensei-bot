@@ -6,7 +6,7 @@ const FeatureGenerator = require('../ml-pipeline/feature-engineering/feature-gen
 (async () => {
   try {
     // Step 1: Run MTFA to get real indicators
-    const mtfaData = await MTFA.analyzeMultipleTimeframes("EUR/USD");
+    const mtfaData = await MTFA.analyze("EUR/USD");
 
     // Extract daily candles + indicators
     const marketData = mtfaData.daily.rawData;
