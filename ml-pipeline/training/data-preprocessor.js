@@ -1,5 +1,5 @@
 // ml-pipeline/training/data-preprocessor.js
-// 🔄 Data Preprocessor for LSTM (Phase 2 Step 1.4)
+// 🔄 Data Preprocessor for LSTM (Phase 2 Step 1.4 + Debugging)
 
 const SwingDataFetcher = require("../../swingDataFetcher");
 const SwingIndicators = require("../../swing-indicators");
@@ -26,15 +26,34 @@ class DataPreprocessor {
     // 2. Add indicators for each candle
     const indicators = await SwingIndicators.calculateAll(candles);
 
+    // 🛠 Debugging logs (first 5 values)
+    console.log("DEBUG EMA20:", indicators.ema20.slice(0, 5));
+    console.log("DEBUG RSI14:", indicators.rsi14.slice(0, 5));
+    console.log("DEBUG MACD:", indicators.macd ? indicators.macd.MACD?.slice(0, 5) : "MISSING");
+    console.log("DEBUG ATR:", indicators.atr.slice(0, 5));
+
     // 3. Build feature set with safe defaults
     const processed = candles.map((candle, idx) => {
-      return {
+      const dataPoint = {
         close: Number.isFinite(candle.close) ? candle.close : 0,
         ema20: Number.isFinite(indicators.ema20[idx]) ? indicators.ema20[idx] : 0,
         rsi: Number.isFinite(indicators.rsi14[idx]) ? indicators.rsi14[idx] : 0,
-        macd: Number.isFinite(indicators.macd.MACD[idx]) ? indicators.macd.MACD[idx] : 0,
+        macd: Number.isFinite(indicators.macd?.MACD?.[idx]) ? indicators.macd.MACD[idx] : 0,
         atr: Number.isFinite(indicators.atr[idx]) ? indicators.atr[idx] : 0,
       };
+
+      // 🔎 Debug invalid entries
+      if (
+        !Number.isFinite(dataPoint.close) ||
+        !Number.isFinite(dataPoint.ema20) ||
+        !Number.isFinite(dataPoint.rsi) ||
+        !Number.isFinite(dataPoint.macd) ||
+        !Number.isFinite(dataPoint.atr)
+      ) {
+        console.warn(`⚠️ Invalid data at index ${idx}:`, dataPoint);
+      }
+
+      return dataPoint;
     });
 
     console.log(`✅ Prepared ${processed.length} candles with indicators`);
@@ -71,10 +90,17 @@ class DataPreprocessor {
     }
 
     // ✅ Convert arrays into tensors
-    const featureTensor = tf.tensor3d(features); // [samples, lookback, 5]
-    const targetTensor = tf.tensor2d(targets);   // [samples, horizon]
+    try {
+      const featureTensor = tf.tensor3d(features); // [samples, lookback, 5]
+      const targetTensor = tf.tensor2d(targets);   // [samples, horizon]
 
-    return { features: featureTensor, targets: targetTensor };
+      return { features: featureTensor, targets: targetTensor };
+    } catch (err) {
+      console.error("❌ Tensor conversion error:", err.message);
+      console.error("Sample bad features:", features[0]);
+      console.error("Sample bad targets:", targets[0]);
+      throw err;
+    }
   }
 }
 
