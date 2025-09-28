@@ -42,13 +42,13 @@ class FeatureGenerator {
   // Momentum Features
   // =========================
   generateMomentumFeatures(indicators) {
-    const rsi = indicators?.rsi14 ?? 50;  
+    const rsi = indicators?.rsi14 ?? 50;
     const macdHist = indicators?.macd?.histogram ?? 0;
 
     return {
       rsi_normalized: (rsi - 50) / 50, // -1 to +1
       macd_histogram: macdHist,
-      momentum_score: Math.sign(macdHist) * Math.abs(rsi - 50) / 50
+      momentum_score: ((rsi - 50) / 50) + macdHist // hybrid momentum
     };
   }
 
@@ -62,10 +62,17 @@ class FeatureGenerator {
     const latestPrice = marketData?.[marketData.length - 1]?.close || 1;
     const bbWidth = bbUpper - bbLower;
 
+    // ATR spike detection → compare with last 14 ATR avg if available
+    let volatility_spike = 0;
+    if (indicators?.atrHistory && indicators.atrHistory.length > 10) {
+      const avgATR = this.avg(indicators.atrHistory);
+      volatility_spike = atr > (avgATR * 1.5) ? 1 : 0;
+    }
+
     return {
       atr_normalized: latestPrice ? atr / latestPrice : 0,
       bb_width: latestPrice ? bbWidth / latestPrice : 0,
-      volatility_spike: atr > (bbWidth * 0.5) ? 1 : 0
+      volatility_spike
     };
   }
 
@@ -118,9 +125,15 @@ class FeatureGenerator {
     const supports = sr.support || [];
     const resistances = sr.resistance || [];
 
+    // Weighted scoring system
+    const strengthMap = { WEAK: 1, MEDIUM: 2, STRONG: 3 };
+
+    const supportScore = supports.reduce((acc, s) => acc + (strengthMap[s.strength] || 0), 0);
+    const resistanceScore = resistances.reduce((acc, r) => acc + (strengthMap[r.strength] || 0), 0);
+
     return {
-      support_strength: supports.filter(s => s.strength === "STRONG").length,
-      resistance_strength: resistances.filter(r => r.strength === "STRONG").length
+      support_strength: supportScore,
+      resistance_strength: resistanceScore
     };
   }
 }
