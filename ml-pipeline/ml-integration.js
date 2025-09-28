@@ -1,50 +1,71 @@
 // ml-pipeline/ml-integration.js
+// 🤖 Phase 2 - Step 1.9: ML Integration Layer
+
 const LSTMPricePredictor = require("./models/lstm-predictor");
 const DataPreprocessor = require("./training/data-preprocessor");
-const SwingDataFetcher = require("../swingDataFetcher");
 const SwingIndicators = require("../swing-indicators");
+const SwingDataFetcher = require("../swingDataFetcher");
+const tf = require("@tensorflow/tfjs-node");
 
-class MLIntegration {
+class MLPipeline {
   constructor() {
     this.predictor = new LSTMPricePredictor();
-    this.preprocessor = new DataPreprocessor(60, 5);
+    this.preprocessor = new DataPreprocessor(60, 5); // lookback=60, horizon=5
+    this.modelLoaded = false;
   }
 
-  async init() {
-    console.log("⚡ Loading LSTM model...");
-    this.predictor.model = await this.predictor.loadModel("file://./saved-models/lstm-model");
-    console.log("✅ Model Loaded");
+  async loadModelIfNeeded() {
+    if (!this.modelLoaded) {
+      try {
+        console.log("📥 Loading saved LSTM model...");
+        this.predictor.model = await tf.loadLayersModel("file://./saved-models/LSTM-model/model.json");
+        this.modelLoaded = true;
+        console.log("✅ Model loaded successfully!");
+      } catch (err) {
+        console.warn("⚠️ No saved model found, building new model...");
+        await this.predictor.buildModel();
+      }
+    }
   }
 
-  async getPrediction(pair = "EUR/USD") {
-    console.log(`📊 Fetching real candles for ${pair}...`);
+  /**
+   * Generate ML predictions for given currency pair
+   */
+  async generateMLPredictions(pair = "EUR/USD") {
+    await this.loadModelIfNeeded();
+
+    console.log(`📊 Fetching candles for ${pair}...`);
     const candles = await SwingDataFetcher.getDailyData(pair);
-
-    console.log(`✅ Got ${candles.length} candles`);
-
-    // Add indicators
     const indicators = await SwingIndicators.calculateAll(candles);
 
-    // Merge candles + indicators
-    const processed = candles.map((c, i) => ({
-      close: c.close,
-      ema20: indicators.ema20[i],
-      rsi: indicators.rsi14[i],
-      macd: indicators.macd.MACD[i],
-      atr: indicators.atr[i],
-    }));
+    // ✅ Prepare sequences
+    const processed = await this.preprocessor.prepare(pair, 5000);
+    const { features, targets } = this.preprocessor.createSequences(processed);
 
-    // Last 70 candles only (to create 60-lookback window + 5 horizon)
-    const recent = processed.slice(-70);
+    // Last batch for prediction
+    const testX = features.slice([features.shape[0] - 1, 0, 0], [1, 60, 5]);
+    const prediction = this.predictor.model.predict(testX);
+    const predValues = await prediction.array();
 
-    // Convert into ML sequences
-    const { features } = this.preprocessor.createSequences(recent);
+    const lastClose = candles[candles.length - 1].close;
+    const predictedClose = predValues[0][predValues[0].length - 1];
 
-    // Run prediction
-    const prediction = await this.predictor.model.predict(features.slice([0, 0, 0], [1, 60, 5])).array();
+    const direction = predictedClose > lastClose ? "BULLISH" : "BEARISH";
 
-    return prediction[0];
+    return {
+      pair,
+      ml: {
+        priceDirection: {
+          prediction: direction,
+          targetPrice: predictedClose,
+          horizon: "5 days"
+        },
+        // Placeholder (confidence & volatility set in test file for now)
+        signalClassification: { signal: direction === "BULLISH" ? "BUY" : "SELL", confidence: 0.5 },
+        volatilityForecast: { level: "UNKNOWN" }
+      }
+    };
   }
 }
 
-module.exports = MLIntegration;
+module.exports = MLPipeline;
