@@ -15,7 +15,6 @@ class SwingSignalClassifier {
     ];
   }
 
-  // ✅ NaN-safe number parser
   safeNumber(v) {
     if (v === null || v === undefined || isNaN(v)) return 0;
     return Number(v);
@@ -36,15 +35,25 @@ class SwingSignalClassifier {
   async trainModel(historicalData) {
     const trainingData = [];
     const labels = [];
+    let skipped = 0;
 
     for (let i = 100; i < historicalData.length - 10; i++) {
       const currentData = historicalData[i];
       const features = this.prepareFeatures(currentData);
 
-      // Look ahead 5 days for price movement
+      const featureArray = Object.values(features);
+      if (featureArray.length !== this.features.length) {
+        console.warn(`⚠️ Skipped sample index ${i}: feature length mismatch`);
+        skipped++;
+        continue;
+      }
+
       const futurePrice = historicalData[i + 5]?.close;
       const currentPrice = currentData.close;
-      if (!futurePrice || !currentPrice) continue;
+      if (!futurePrice || !currentPrice) {
+        skipped++;
+        continue;
+      }
 
       const priceChange = (futurePrice - currentPrice) / currentPrice;
 
@@ -53,11 +62,9 @@ class SwingSignalClassifier {
       else if (priceChange < -0.01) label = "SELL";
       else label = "HOLD";
 
-      const featureArray = Object.values(features);
-
-      // ✅ Strict feature length check
-      if (featureArray.length !== this.features.length) {
-        console.warn(`⚠️ Skipped sample at index ${i}: Invalid feature length`, featureArray);
+      if (!label) {
+        console.warn(`⚠️ Skipped sample index ${i}: invalid label`);
+        skipped++;
         continue;
       }
 
@@ -65,21 +72,20 @@ class SwingSignalClassifier {
       labels.push(label);
     }
 
-    // ✅ Guard clause
     if (!trainingData.length || !labels.length) {
       throw new Error("❌ No valid training data for Random Forest.");
     }
 
-    // 📊 Debug distribution
+    console.log(
+      `📊 Training Random Forest → Samples: ${trainingData.length}, Features: ${this.features.length}, Skipped: ${skipped}`
+    );
+
+    // ✅ Print label distribution
     const dist = labels.reduce((acc, l) => {
       acc[l] = (acc[l] || 0) + 1;
       return acc;
     }, {});
-    console.log(`📊 Training distribution:`, dist);
-
-    console.log(
-      `📊 Training Random Forest → Samples: ${trainingData.length}, Features: ${this.features.length}`
-    );
+    console.log("📊 Label distribution:", dist);
 
     this.model = new RandomForestClassifier({
       nEstimators: 100,
@@ -97,10 +103,6 @@ class SwingSignalClassifier {
 
     const features = this.prepareFeatures(currentData);
     const featureArray = [Object.values(features)];
-
-    if (featureArray[0].length !== this.features.length) {
-      throw new Error(`❌ Invalid feature length at prediction: ${featureArray[0].length}`);
-    }
 
     const prediction = this.model.predict(featureArray);
     const probabilities = this.model.predictProba(featureArray);
@@ -121,7 +123,7 @@ class SwingSignalClassifier {
     return data.ema20 > data.ema50 ? 1 : -1;
   }
   normalizeRSI(rsi) {
-    return (rsi ?? 50) / 100; // default neutral = 0.5
+    return rsi / 100;
   }
   getMACDSignal(macd) {
     return (macd?.macd || 0) - (macd?.signal || 0);
