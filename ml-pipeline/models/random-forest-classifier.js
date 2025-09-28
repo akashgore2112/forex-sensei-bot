@@ -44,8 +44,7 @@ class SwingSignalClassifier {
       // Look ahead 5 days for price movement
       const futurePrice = historicalData[i + 5]?.close;
       const currentPrice = currentData.close;
-
-      if (!futurePrice || !currentPrice) continue; // skip invalid data
+      if (!futurePrice || !currentPrice) continue;
 
       const priceChange = (futurePrice - currentPrice) / currentPrice;
 
@@ -54,7 +53,15 @@ class SwingSignalClassifier {
       else if (priceChange < -0.01) label = "SELL";
       else label = "HOLD";
 
-      trainingData.push(Object.values(features));
+      const featureArray = Object.values(features);
+
+      // ✅ Strict feature length check
+      if (featureArray.length !== this.features.length) {
+        console.warn(`⚠️ Skipped sample at index ${i}: Invalid feature length`, featureArray);
+        continue;
+      }
+
+      trainingData.push(featureArray);
       labels.push(label);
     }
 
@@ -62,6 +69,13 @@ class SwingSignalClassifier {
     if (!trainingData.length || !labels.length) {
       throw new Error("❌ No valid training data for Random Forest.");
     }
+
+    // 📊 Debug distribution
+    const dist = labels.reduce((acc, l) => {
+      acc[l] = (acc[l] || 0) + 1;
+      return acc;
+    }, {});
+    console.log(`📊 Training distribution:`, dist);
 
     console.log(
       `📊 Training Random Forest → Samples: ${trainingData.length}, Features: ${this.features.length}`
@@ -84,6 +98,10 @@ class SwingSignalClassifier {
     const features = this.prepareFeatures(currentData);
     const featureArray = [Object.values(features)];
 
+    if (featureArray[0].length !== this.features.length) {
+      throw new Error(`❌ Invalid feature length at prediction: ${featureArray[0].length}`);
+    }
+
     const prediction = this.model.predict(featureArray);
     const probabilities = this.model.predictProba(featureArray);
 
@@ -98,15 +116,15 @@ class SwingSignalClassifier {
     };
   }
 
-  // 🟢 Placeholder methods (implement properly later)
+  // 🟢 Placeholder methods
   calculateEMATrend(data) {
     return data.ema20 > data.ema50 ? 1 : -1;
   }
   normalizeRSI(rsi) {
-    return rsi / 100;
+    return (rsi ?? 50) / 100; // default neutral = 0.5
   }
   getMACDSignal(macd) {
-    return macd?.macd - macd?.signal || 0;
+    return (macd?.macd || 0) - (macd?.signal || 0);
   }
   normalizeATR(atr) {
     return atr || 0;
