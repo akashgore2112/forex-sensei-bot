@@ -5,7 +5,6 @@ const LSTMPricePredictor = require("../ml-pipeline/models/lstm-predictor");
 const DataPreprocessor = require("../ml-pipeline/training/data-preprocessor");
 const SwingDataFetcher = require("../swingDataFetcher");
 const SwingIndicators = require("../swing-indicators");
-const tf = require("@tensorflow/tfjs-node");
 
 async function runRealLSTMTest() {
   console.log("🚀 Starting Step 1.1: LSTM Training with Real Historical Data...");
@@ -36,23 +35,26 @@ async function runRealLSTMTest() {
   }));
 
   console.log(`✅ Processed ${processed.length} candles with indicators`);
+  console.log("🔎 Sample processed[0..2]:", processed.slice(0, 3));
 
-  // 4. Convert into training sequences
+  // 4. Convert into training sequences (tensors already returned)
   const { features, targets } = preprocessor.createSequences(processed);
-  console.log("📊 Features length:", features.length);
-  console.log("🎯 Targets length:", targets.length);
-
-  // Convert to tensors
-  const featureTensor = tf.tensor3d(features);
-  const targetTensor = tf.tensor2d(targets);
+  console.log("📊 Features tensor shape:", features.shape);
+  console.log("🎯 Targets tensor shape:", targets.shape);
 
   // 5. Train model
   console.log("⚡ Training LSTM on real forex data...");
-  await predictor.model.fit(featureTensor, targetTensor, {
+  await predictor.model.fit(features, targets, {
     epochs: 50,
     batchSize: 32,
     validationSplit: 0.2,
-    callbacks: tf.callbacks.earlyStopping({ patience: 5 }),
+    callbacks: [
+      {
+        onEpochEnd: (epoch, logs) => {
+          console.log(`📉 Epoch ${epoch + 1}: loss=${logs.loss.toFixed(6)}, val_loss=${logs.val_loss?.toFixed(6)}`);
+        }
+      }
+    ],
   });
   console.log("✅ Training Completed!");
 
@@ -67,10 +69,10 @@ async function runRealLSTMTest() {
 
   // ✅ Ensure output format matches Step 1.1 expected
   const formattedResult = {
-    predictedPrices: prediction.predictedPrices,
-    confidence: prediction.confidence,
+    predictedPrices: prediction.predictedPrices.map(p => Number(p.toFixed(5))),
+    confidence: prediction.confidence ?? 0.0,
     direction: prediction.direction,
-    volatility: prediction.volatility
+    volatility: prediction.volatility ?? "UNKNOWN"
   };
 
   console.log("\n📌 Final Prediction Result:");
