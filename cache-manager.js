@@ -1,4 +1,3 @@
-// cache-manager.js
 const fs = require("fs");
 const path = require("path");
 
@@ -24,6 +23,13 @@ class CacheManager {
       };
       this._saveStats();
     }
+
+    // ✅ Default TTL rules (minutes)
+    this.ttlRules = {
+      DAILY: 1440,      // 24 hours
+      WEEKLY: 10080,    // 7 days
+      MONTHLY: 43200    // 30 days
+    };
   }
 
   // ✅ Internal: Save stats
@@ -35,6 +41,14 @@ class CacheManager {
   _getFilePath(key) {
     const safeKey = key.replace(/[\/\\]/g, "_"); // replace / and \ with _
     return path.join(this.cacheDir, `${safeKey}.json`);
+  }
+
+  // ✅ Detect TTL based on key
+  _getTTL(key) {
+    if (key.includes("DAILY")) return this.ttlRules.DAILY;
+    if (key.includes("WEEKLY")) return this.ttlRules.WEEKLY;
+    if (key.includes("MONTHLY")) return this.ttlRules.MONTHLY;
+    return 1440; // default 24h
   }
 
   // ✅ Track API usage
@@ -59,16 +73,23 @@ class CacheManager {
     this._saveStats();
   }
 
-  // ✅ Load cache with TTL
-  load(key, maxAgeMinutes = 1440) {
+  // ✅ Load cache with TTL + auto cleanup
+  load(key, maxAgeMinutes = null) {
     const filePath = this._getFilePath(key);
     if (!fs.existsSync(filePath)) return null;
 
     const raw = fs.readFileSync(filePath, "utf-8");
     const cached = JSON.parse(raw);
 
+    // Apply TTL (either custom or default rules)
+    const ttl = maxAgeMinutes || this._getTTL(key);
     const ageMinutes = (Date.now() - cached.timestamp) / 60000;
-    if (ageMinutes > maxAgeMinutes) {
+
+    if (ageMinutes > ttl) {
+      // Auto delete expired cache file
+      fs.unlinkSync(filePath);
+      this.stats.cacheMisses += 1;
+      this._saveStats();
       return null;
     }
 
@@ -86,11 +107,11 @@ class CacheManager {
   }
 
   // ✅ Aliases
-  set(key, data, maxAgeMinutes = 1440) {
+  set(key, data, maxAgeMinutes = null) {
     this.save(key, data, maxAgeMinutes);
   }
 
-  get(key, maxAgeMinutes = 1440) {
+  get(key, maxAgeMinutes = null) {
     return this.load(key, maxAgeMinutes);
   }
 
