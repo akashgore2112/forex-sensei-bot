@@ -1,5 +1,5 @@
 // verifySTP1.js
-// ✅ Consolidated Phase 1 Verification
+// ✅ Consolidated Phase 1 Verification with TA-Lib
 
 const SwingDataFetcher = require("../swingDataFetcher");
 const SwingIndicators = require("../swing-indicators");
@@ -24,9 +24,9 @@ async function verifyPhase1() {
   if (weekly.length < 100) console.warn("⚠️ Weekly candles < 100 (expected 100+)");
   if (monthly.length < 24) console.warn("⚠️ Monthly candles < 24 (expected 24+)");
 
-  // === 2. Indicator Tests ===
-  console.log("\n📈 Testing Technical Indicators...");
-  const indicators = SwingIndicators.calculateAll(daily);
+  // === 2. Indicator Tests (now async with TA-Lib) ===
+  console.log("\n📈 Testing Technical Indicators (via TA-Lib)...");
+  const indicators = await SwingIndicators.calculateAll(daily);
 
   console.log("EMA20:", indicators.ema20);
   console.log("EMA50:", indicators.ema50);
@@ -36,6 +36,10 @@ async function verifyPhase1() {
   console.log("ADX:", indicators.adx);
   console.log("ATR:", indicators.atr);
   console.log("Bollinger Bands:", indicators.bollinger);
+
+  console.log("\n🔍 Support/Resistance Levels:");
+  console.log("Support:", indicators.supportResistance.support);
+  console.log("Resistance:", indicators.supportResistance.resistance);
 
   // === 3. Multi-Timeframe Analysis ===
   console.log("\n🔍 Testing Multi-Timeframe Analysis (MTFA)...");
@@ -58,7 +62,7 @@ async function verifyPhase1() {
   }
 
   // === 5. Final Result ===
-  console.log("\n🎯 Phase 1 Verification Completed!");
+  console.log("\n🎯 Phase 1 Verification Completed with TA-Lib!");
   console.log("👉 Review logs above to confirm all components are working.\n");
 }
 
