@@ -10,7 +10,7 @@ class FeatureGenerator {
       ...this.generateVolatilityFeatures(marketData, indicators),
       ...this.generatePatternFeatures(marketData),
       ...this.generateStatisticalFeatures(marketData),
-      ...this.generateSupportResistanceFeatures(indicators)
+      ...this.generateSupportResistanceFeatures(indicators),
     };
   }
 
@@ -24,7 +24,7 @@ class FeatureGenerator {
       price_above_ema20: latestPrice > (indicators?.ema20 || 0) ? 1 : 0,
       price_above_ema50: latestPrice > (indicators?.ema50 || 0) ? 1 : 0,
       price_above_ema200: latestPrice > (indicators?.ema200 || 0) ? 1 : 0,
-      ema_alignment: this.checkEMAAlignment(indicators)
+      ema_alignment: this.checkEMAAlignment(indicators),
     };
   }
 
@@ -33,8 +33,8 @@ class FeatureGenerator {
     const ema50 = indicators?.ema50 ?? 0;
     const ema200 = indicators?.ema200 ?? 0;
 
-    if (ema20 > ema50 && ema50 > ema200) return 1;   // bullish alignment
-    if (ema20 < ema50 && ema50 < ema200) return -1;  // bearish alignment
+    if (ema20 > ema50 && ema50 > ema200) return 1; // bullish
+    if (ema20 < ema50 && ema50 < ema200) return -1; // bearish
     return 0; // mixed
   }
 
@@ -48,7 +48,7 @@ class FeatureGenerator {
     return {
       rsi_normalized: (rsi - 50) / 50, // -1 to +1
       macd_histogram: macdHist,
-      momentum_score: ((rsi - 50) / 50) + macdHist // hybrid momentum
+      momentum_score: Math.sign(macdHist) * Math.abs(rsi - 50) / 50,
     };
   }
 
@@ -62,17 +62,10 @@ class FeatureGenerator {
     const latestPrice = marketData?.[marketData.length - 1]?.close || 1;
     const bbWidth = bbUpper - bbLower;
 
-    // ATR spike detection → compare with last 14 ATR avg if available
-    let volatility_spike = 0;
-    if (indicators?.atrHistory && indicators.atrHistory.length > 10) {
-      const avgATR = this.avg(indicators.atrHistory);
-      volatility_spike = atr > (avgATR * 1.5) ? 1 : 0;
-    }
-
     return {
       atr_normalized: latestPrice ? atr / latestPrice : 0,
       bb_width: latestPrice ? bbWidth / latestPrice : 0,
-      volatility_spike
+      volatility_spike: atr > (bbWidth * 0.5) ? 1 : 0,
     };
   }
 
@@ -85,10 +78,14 @@ class FeatureGenerator {
     }
 
     const last3 = marketData.slice(-3);
+
     return {
-      higher_highs: last3[2].high > last3[1].high && last3[1].high > last3[0].high ? 1 : 0,
-      higher_lows: last3[2].low > last3[1].low && last3[1].low > last3[0].low ? 1 : 0,
-      breakout_pattern: last3[2].close > Math.max(last3[0].high, last3[1].high) ? 1 : 0
+      higher_highs:
+        last3[2].high > last3[1].high && last3[1].high > last3[0].high ? 1 : 0,
+      higher_lows:
+        last3[2].low > last3[1].low && last3[1].low > last3[0].low ? 1 : 0,
+      breakout_pattern:
+        last3[2].close > Math.max(last3[0].high, last3[1].high) ? 1 : 0,
     };
   }
 
@@ -100,15 +97,16 @@ class FeatureGenerator {
       return { z_score: 0, rolling_mean: 0, rolling_std: 0 };
     }
 
-    const closes = marketData.map(c => c.close);
+    const closes = marketData.map((c) => c.close);
     const mean = this.avg(closes);
-    const std = Math.sqrt(this.avg(closes.map(p => (p - mean) ** 2))) || 1;
+    const std =
+      Math.sqrt(this.avg(closes.map((p) => (p - mean) ** 2))) || 1;
     const lastClose = closes[closes.length - 1];
 
     return {
       z_score: (lastClose - mean) / std,
       rolling_mean: mean,
-      rolling_std: std
+      rolling_std: std,
     };
   }
 
@@ -121,19 +119,14 @@ class FeatureGenerator {
   // Support/Resistance Features
   // =========================
   generateSupportResistanceFeatures(indicators) {
-    const sr = indicators?.SupportResistance || {};
+    // 👇 FIX: lowercase "supportResistance" use kiya hai
+    const sr = indicators?.supportResistance || {};
     const supports = sr.support || [];
     const resistances = sr.resistance || [];
 
-    // Weighted scoring system
-    const strengthMap = { WEAK: 1, MEDIUM: 2, STRONG: 3 };
-
-    const supportScore = supports.reduce((acc, s) => acc + (strengthMap[s.strength] || 0), 0);
-    const resistanceScore = resistances.reduce((acc, r) => acc + (strengthMap[r.strength] || 0), 0);
-
     return {
-      support_strength: supportScore,
-      resistance_strength: resistanceScore
+      support_strength: supports.filter((s) => s.strength === "STRONG").length,
+      resistance_strength: resistances.filter((r) => r.strength === "STRONG").length,
     };
   }
 }
