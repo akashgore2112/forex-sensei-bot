@@ -1,41 +1,34 @@
 // test/test-ml-integration.js
-// 🧪 Testing Step 1.9 Integration
+// 📊 Step 1.9 - Full Integration Test (Phase-1 + LSTM)
 
 const MLIntegration = require("../ml-pipeline/ml-integration");
 
 async function runIntegrationTest() {
-  console.log("🚀 Running Step 1.9: MTFA + ML Integration Test...");
+  console.log("🚀 Starting Step 1.9: ML Integration Test...");
 
   const integration = new MLIntegration();
+  await integration.init();
 
-  // Dummy Phase 1 MTFA output (simulate strategy signals)
-  const mtfaOutput = {
-    pair: "EUR/USD",
-    signal: "BUY",
-    confidence: 0.7,
-    indicators: {
-      rsi: 45,
-      emaTrend: "UP",
-      macd: "POSITIVE",
-    },
-  };
+  try {
+    // 1. Run prediction
+    const prediction = await integration.getPrediction("EUR/USD");
 
-  // Dummy recent candles (60 bars with indicators)
-  const recentCandles = Array.from({ length: 60 }, (_, i) => ({
-    close: 1.1 + i * 0.001,
-    ema20: 1.1 + i * 0.001,
-    rsi: 40 + (i % 10),
-    macd: 0.01 * i,
-    atr: 0.005 * (i % 5),
-  }));
+    // 2. Pretty print results
+    console.log("\n🔮 Final Integrated Prediction (EUR/USD):");
+    console.log("------------------------------------------");
+    console.log("📌 Predicted Prices (next 5 days):");
+    prediction.predictedPrices.forEach((p, i) => {
+      console.log(` Day ${i + 1}: ${p.toFixed(6)}`);
+    });
 
-  // Run integration
-  const result = await integration.integrate(mtfaOutput, recentCandles);
+    console.log("\n📊 Additional Info:");
+    console.log(` Direction Signal: ${prediction.direction}`);
+    console.log(` Raw Output Shape: ${prediction.predictedPrices.length}`);
 
-  console.log("\n📌 Integration Output:");
-  console.dir(result, { depth: null });
+    console.log("\n🎯 Step 1.9 Integration Test Completed Successfully!");
+  } catch (err) {
+    console.error("❌ Error in Integration Test:", err);
+  }
 }
 
-runIntegrationTest().catch((err) => {
-  console.error("❌ Error in Integration Test:", err);
-});
+runIntegrationTest();
