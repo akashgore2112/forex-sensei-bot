@@ -1,5 +1,5 @@
 // test/test-lstm-real.js
-// 📊 Step 1.1 - Real LSTM Test with MTFA Daily Candles
+// 📊 Step 1.1 - Real LSTM Test with MTFA Daily Candles + Normalization Debug
 
 const LSTMPricePredictor = require("../ml-pipeline/models/lstm-predictor");
 const DataPreprocessor = require("../ml-pipeline/training/data-preprocessor");
@@ -30,15 +30,24 @@ async function runRealLSTMTest() {
   const indicators = await SwingIndicators.calculateAll(candles);
 
   // 3. Merge candles + indicators
-  const processed = candles.map((c, i) => ({
-    close: c.close,
-    ema20: Array.isArray(indicators.ema20) ? indicators.ema20[i] : indicators.ema20,
-    rsi: Array.isArray(indicators.rsi14) ? indicators.rsi14[i] : indicators.rsi14,
-    macd: indicators.macd && Array.isArray(indicators.macd.MACD)
-      ? indicators.macd.MACD[i]
-      : indicators.macd?.MACD || 0,
-    atr: Array.isArray(indicators.atr) ? indicators.atr[i] : indicators.atr
-  }));
+  const processed = candles.map((c, i) => {
+    const dp = {
+      close: c.close,
+      ema20: Array.isArray(indicators.ema20) ? indicators.ema20[i] : indicators.ema20,
+      rsi: Array.isArray(indicators.rsi14) ? indicators.rsi14[i] : indicators.rsi14,
+      macd: indicators.macd && Array.isArray(indicators.macd.MACD)
+        ? indicators.macd.MACD[i]
+        : indicators.macd?.MACD || 0,
+      atr: Array.isArray(indicators.atr) ? indicators.atr[i] : indicators.atr
+    };
+
+    // Debug invalid values
+    if (Object.values(dp).some(v => v === undefined || isNaN(v))) {
+      console.warn(`⚠️ Invalid data at index ${i}:`, dp);
+    }
+
+    return dp;
+  });
 
   console.log(`✅ Processed ${processed.length} candles with indicators`);
 
@@ -72,18 +81,23 @@ async function runRealLSTMTest() {
   // 7. Predict next 5 days
   console.log("\n🔮 Making 5-day prediction...");
   const recentData = processed.slice(-60); // last 60 days
-  const prediction = await predictor.predict(recentData);
 
-  // ✅ Format output as per plan
-  const formattedResult = {
-    predictedPrices: prediction.predictedPrices.map(p => Number(p.toFixed(5))),
-    confidence: prediction.confidence ?? 0.0,
-    direction: prediction.direction,
-    volatility: prediction.volatility ?? "UNKNOWN"
-  };
+  try {
+    const prediction = await predictor.predict(recentData);
 
-  console.log("\n📌 Final Prediction Result:");
-  console.dir(formattedResult, { depth: null });
+    // ✅ Format output as per plan
+    const formattedResult = {
+      predictedPrices: prediction.predictedPrices.map(p => Number(p.toFixed(5))),
+      confidence: prediction.confidence ?? 0.0,
+      direction: prediction.direction,
+      volatility: prediction.volatility ?? "UNKNOWN"
+    };
+
+    console.log("\n📌 Final Prediction Result:");
+    console.dir(formattedResult, { depth: null });
+  } catch (err) {
+    console.error("❌ Prediction failed:", err.message);
+  }
 }
 
 runRealLSTMTest().catch((err) => {
