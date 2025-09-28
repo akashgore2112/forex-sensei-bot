@@ -2,7 +2,7 @@
 // 📘 LSTM Price Predictor (Phase 2 - Step 1.1 Final with Normalization + MTFA input)
 
 const tf = require("@tensorflow/tfjs-node");
-const FeatureNormalizer = require("../training/feature-normalizer"); // ✅ Normalizer import
+const FeatureNormalizer = require("../feature-engineering/feature-normalizer"); // ✅ Normalizer import
 
 class LSTMPricePredictor {
   constructor() {
