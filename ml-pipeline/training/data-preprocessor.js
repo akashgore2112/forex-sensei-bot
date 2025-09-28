@@ -3,7 +3,7 @@
 
 const SwingDataFetcher = require("../../swingDataFetcher");
 const SwingIndicators = require("../../swing-indicators");
-const tf = require("@tensorflow/tfjs-node"); // ✅ TensorFlow import add kiya
+const tf = require("@tensorflow/tfjs-node"); // ✅ TensorFlow import
 
 class DataPreprocessor {
   constructor(lookback = 60, horizon = 5) {
@@ -26,14 +26,14 @@ class DataPreprocessor {
     // 2. Add indicators for each candle
     const indicators = await SwingIndicators.calculateAll(candles);
 
-    // 3. Build feature set
+    // 3. Build feature set with safe defaults
     const processed = candles.map((candle, idx) => {
       return {
-        close: candle.close,
-        ema20: indicators.ema20[idx] || indicators.ema20[indicators.ema20.length - 1],
-        rsi: indicators.rsi14[idx] || indicators.rsi14[indicators.rsi14.length - 1],
-        macd: indicators.macd.MACD[idx] || indicators.macd.MACD[indicators.macd.MACD.length - 1],
-        atr: indicators.atr[idx] || indicators.atr[indicators.atr.length - 1]
+        close: Number.isFinite(candle.close) ? candle.close : 0,
+        ema20: Number.isFinite(indicators.ema20[idx]) ? indicators.ema20[idx] : 0,
+        rsi: Number.isFinite(indicators.rsi14[idx]) ? indicators.rsi14[idx] : 0,
+        macd: Number.isFinite(indicators.macd.MACD[idx]) ? indicators.macd.MACD[idx] : 0,
+        atr: Number.isFinite(indicators.atr[idx]) ? indicators.atr[idx] : 0,
       };
     });
 
@@ -52,18 +52,20 @@ class DataPreprocessor {
       const featureWindow = [];
       for (let j = i - this.lookback; j < i; j++) {
         featureWindow.push([
-          historicalData[j].close,
-          historicalData[j].ema20,
-          historicalData[j].rsi,
-          historicalData[j].macd,
-          historicalData[j].atr
+          Number.isFinite(historicalData[j].close) ? historicalData[j].close : 0,
+          Number.isFinite(historicalData[j].ema20) ? historicalData[j].ema20 : 0,
+          Number.isFinite(historicalData[j].rsi) ? historicalData[j].rsi : 0,
+          Number.isFinite(historicalData[j].macd) ? historicalData[j].macd : 0,
+          Number.isFinite(historicalData[j].atr) ? historicalData[j].atr : 0,
         ]);
       }
       features.push(featureWindow);
 
       const targetWindow = [];
       for (let k = i + 1; k <= i + this.horizon; k++) {
-        targetWindow.push(historicalData[k].close);
+        targetWindow.push(
+          Number.isFinite(historicalData[k].close) ? historicalData[k].close : 0
+        );
       }
       targets.push(targetWindow);
     }
