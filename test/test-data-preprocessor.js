@@ -20,21 +20,21 @@ async function testPreprocessor() {
   const horizon = 5;
 
   try {
-    const { features, targets } = DataPreprocessor.prepareTrainingData(
-      historicalData,
-      lookback,
-      horizon
-    );
+    // ✅ Use the class properly
+    const dp = new DataPreprocessor(lookback, horizon);
 
-    console.log("✅ Features Shape:", features.shape);
-    console.log("✅ Targets Shape:", targets.shape);
+    // Convert dummy data into LSTM sequences
+    const { features, targets } = dp.createSequences(historicalData);
+
+    console.log("✅ Features Length:", features.length);
+    console.log("✅ Targets Length:", targets.length);
 
     // Ek chhota sample print karo
     console.log("\n🔎 Sample Feature Window (first entry):");
-    console.log(await features.slice([0, 0, 0], [1, lookback, 5]).array());
+    console.log(features[0]);
 
     console.log("\n🔎 Sample Target Window (first entry):");
-    console.log(await targets.slice([0, 0], [1, horizon]).array());
+    console.log(targets[0]);
 
     console.log("\n🎯 Data Preprocessor Test Completed Successfully!");
   } catch (err) {
