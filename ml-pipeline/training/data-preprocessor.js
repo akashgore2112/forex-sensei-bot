@@ -1,5 +1,5 @@
 // ml-pipeline/training/data-preprocessor.js
-// 🔄 Data Preprocessor for LSTM (Phase 2 Step 1.1 using MTFA output)
+// 🔄 Data Preprocessor for LSTM (Phase 2 Step 1.1 using MTFA output + Normalization Ready)
 
 const tf = require("@tensorflow/tfjs-node");
 
@@ -11,30 +11,48 @@ class DataPreprocessor {
 
   /**
    * Preprocess MTFA output into training dataset
-   * @param {Array} mtfaData - Array of daily MTFA results with indicators
+   * @param {Array} mtfaData - Array of daily MTFA candles with indicators
+   * Expected keys: { close, ema20, rsi14, macd, atr }
    */
   createSequences(mtfaData) {
     const features = [];
     const targets = [];
 
     for (let i = this.lookback; i < mtfaData.length - this.horizon; i++) {
-      // 🔹 Build feature window (last 60 days of indicators)
+      // 🔹 Build feature window (last N days)
       const featureWindow = [];
       for (let j = i - this.lookback; j < i; j++) {
+        const dp = {
+          close: mtfaData[j].close ?? 0,
+          ema20: mtfaData[j].ema20 ?? 0,
+          rsi14: mtfaData[j].rsi14 ?? 0,
+          macd: mtfaData[j].macd?.macd ?? 0,
+          atr: mtfaData[j].atr ?? 0,
+        };
+
+        // Debug for invalid values
+        if (Object.values(dp).some(v => v === undefined || isNaN(v))) {
+          console.warn(`⚠️ Invalid feature data at index ${j}:`, dp);
+        }
+
         featureWindow.push([
-          mtfaData[j].close || 0,
-          mtfaData[j].ema20 || 0,
-          mtfaData[j].rsi14 || 0,
-          mtfaData[j].macd?.macd || 0,
-          mtfaData[j].atr || 0,
+          dp.close,
+          dp.ema20,
+          dp.rsi14,
+          dp.macd,
+          dp.atr,
         ]);
       }
       features.push(featureWindow);
 
-      // 🔹 Build target window (next 5 closes)
+      // 🔹 Build target window (next horizon closes)
       const targetWindow = [];
       for (let k = i; k < i + this.horizon; k++) {
-        targetWindow.push(mtfaData[k].close || 0);
+        const closeVal = mtfaData[k].close ?? 0;
+        if (isNaN(closeVal)) {
+          console.warn(`⚠️ Invalid target close at index ${k}:`, mtfaData[k]);
+        }
+        targetWindow.push(closeVal);
       }
       targets.push(targetWindow);
     }
@@ -45,10 +63,17 @@ class DataPreprocessor {
       throw new Error("❌ No sequences generated. Check MTFA data length.");
     }
 
-    return {
-      features: tf.tensor3d(features, [features.length, this.lookback, 5]),
-      targets: tf.tensor2d(targets, [targets.length, this.horizon])
-    };
+    // ✅ Convert arrays → tensors
+    try {
+      const featureTensor = tf.tensor3d(features, [features.length, this.lookback, 5]);
+      const targetTensor = tf.tensor2d(targets, [targets.length, this.horizon]);
+      return { features: featureTensor, targets: targetTensor };
+    } catch (err) {
+      console.error("❌ Tensor conversion error:", err.message);
+      console.error("Sample bad feature window:", features[0]);
+      console.error("Sample bad target window:", targets[0]);
+      throw err;
+    }
   }
 }
 
