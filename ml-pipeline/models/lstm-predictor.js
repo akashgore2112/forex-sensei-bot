@@ -159,8 +159,8 @@ class LSTMPricePredictor {
       callbacks: [
         tf.callbacks.earlyStopping({ 
           monitor: 'val_loss',
-          patience: 10,
-          restoreBestWeights: true 
+          patience: 10
+          // restoreBestWeights not supported in tfjs yet
         }),
         {
           onEpochEnd: (epoch, logs) => {
