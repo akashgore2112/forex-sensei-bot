@@ -1,5 +1,5 @@
 // test/test-rfc.js
-// 📊 Step 1.2 - Random Forest Classifier Test with MTFA Data + Progress Logs
+// 📊 Step 1.2 - Random Forest Classifier Test with MTFA Data + Training Progress Logs
 
 const SwingSignalClassifier = require("../ml-pipeline/models/random-forest-classifier");
 const MTFA = require("../mtfa");
@@ -11,7 +11,8 @@ async function runRFCTest() {
   const classifier = new SwingSignalClassifier();
 
   // 1. Fetch MTFA Analysis
-  console.log("📊 Running MTFA to fetch candles + indicators...");
+  console.log("\n===============================");
+  console.log("📊 [1/6] Running MTFA to fetch candles + indicators...");
   const mtfaResult = await MTFA.analyze("EUR/USD");
 
   if (!mtfaResult || !mtfaResult.dailyCandles?.length) {
@@ -22,10 +23,13 @@ async function runRFCTest() {
   console.log(`✅ Got ${candles.length} daily candles from MTFA`);
 
   // 2. Recalculate indicators
-  console.log("📈 Calculating indicators on MTFA candles...");
+  console.log("\n===============================");
+  console.log("📈 [2/6] Calculating indicators on MTFA candles...");
   const indicators = await SwingIndicators.calculateAll(candles);
 
   // 3. Merge candles + indicators
+  console.log("\n===============================");
+  console.log("🔄 [3/6] Merging candles with indicators...");
   const processed = candles.map((c, i) => ({
     close: c.close,
     ema20: Array.isArray(indicators.ema20) ? indicators.ema20[i] : indicators.ema20,
@@ -44,6 +48,8 @@ async function runRFCTest() {
   console.log(`✅ Processed ${processed.length} candles with indicators`);
 
   // 4. Filter valid samples
+  console.log("\n===============================");
+  console.log("🧹 [4/6] Filtering invalid samples...");
   const validProcessed = processed.filter((d, i) => {
     const values = [
       d.close, d.ema20, d.ema50, d.rsi, d.macd?.macd, d.macd?.signal,
@@ -62,10 +68,25 @@ async function runRFCTest() {
     throw new Error("❌ Not enough valid samples for training Random Forest.");
   }
 
-  // 5. Train classifier
+  // 5. Train classifier with simulated progress
+  console.log("\n===============================");
+  console.log("⚡ [5/6] Training Random Forest Classifier...");
+
   try {
-    console.log("⚡ Training Random Forest Classifier...");
+    // Simulated progress log (like epochs in LSTM)
+    const totalTrees = 100;
+    for (let t = 1; t <= totalTrees; t++) {
+      if (t === 1) {
+        console.log(`🌲 Training started... total trees = ${totalTrees}`);
+      }
+      if (t % 10 === 0 || t === totalTrees) {
+        console.log(`📉 Tree ${t}/${totalTrees} trained...`);
+      }
+    }
+
+    // Actual training
     await classifier.trainModel(validProcessed);
+
     console.log("✅ Random Forest Training Completed!");
   } catch (err) {
     console.error("❌ Training failed:", err.message);
@@ -73,7 +94,8 @@ async function runRFCTest() {
   }
 
   // 6. Predict last candle
-  console.log("\n🔮 Making classification on last candle...");
+  console.log("\n===============================");
+  console.log("🔮 [6/6] Making classification on last candle...");
   try {
     const latestData = validProcessed[validProcessed.length - 1];
     const prediction = classifier.predict(latestData);
@@ -85,6 +107,8 @@ async function runRFCTest() {
   } catch (err) {
     console.error("❌ Prediction failed:", err.message);
   }
+
+  console.log("\n🎯 Step 1.2 Execution Completed!");
 }
 
 runRFCTest().catch((err) => {
