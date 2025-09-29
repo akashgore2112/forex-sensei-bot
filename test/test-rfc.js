@@ -1,5 +1,5 @@
 // test/test-rfc.js
-// 📊 Step 1.2 - Random Forest Classifier Test with MTFA Data + Load-or-Train (MACD Flattened)
+// 📊 Step 1.2 - Random Forest Classifier Test with MTFA Data + Load-or-Train (MACD Object Format)
 
 const SwingSignalClassifier = require("../ml-pipeline/models/random-forest-classifier");
 const MTFA = require("../mtfa");
@@ -47,18 +47,20 @@ async function runRFCTest() {
   // 🔹 Recalculate indicators
   const indicators = await SwingIndicators.calculateAll(candles);
 
-  // 🔹 Merge candles + indicators (flattened MACD)
+  // 🔹 Merge candles + indicators (MACD object format!)
   const processed = candles.map((c, i) => ({
     close: c.close,
     ema20: Array.isArray(indicators.ema20) ? indicators.ema20[i] : indicators.ema20,
     ema50: Array.isArray(indicators.ema50) ? indicators.ema50[i] : indicators.ema50,
     rsi: Array.isArray(indicators.rsi14) ? indicators.rsi14[i] : indicators.rsi14,
-    macd: Array.isArray(indicators.macd?.MACD)
-      ? indicators.macd.MACD[i]
-      : indicators.macd?.MACD || 0,
-    macdSignal: Array.isArray(indicators.macd?.signal)
-      ? indicators.macd.signal[i]
-      : indicators.macd?.signal || 0,
+    macd: {
+      macd: Array.isArray(indicators.macd?.MACD)
+        ? indicators.macd.MACD[i]
+        : indicators.macd?.MACD || 0,
+      signal: Array.isArray(indicators.macd?.signal)
+        ? indicators.macd.signal[i]
+        : indicators.macd?.signal || 0,
+    },
     atr: Array.isArray(indicators.atr) ? indicators.atr[i] : indicators.atr,
     volume: c.volume || 1000,
     avgVolume: 1000,
@@ -73,7 +75,8 @@ async function runRFCTest() {
     console.log("\n🧹 Filtering invalid samples for training...");
     const validProcessed = processed.filter((d) => {
       const values = [
-        d.close, d.ema20, d.ema50, d.rsi, d.macd, d.macdSignal,
+        d.close, d.ema20, d.ema50, d.rsi,
+        d.macd?.macd, d.macd?.signal,
         d.atr, d.volume, d.avgVolume, d.prevClose,
       ];
       return values.every(v => v !== undefined && !Number.isNaN(v));
