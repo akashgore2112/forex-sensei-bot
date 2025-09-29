@@ -51,9 +51,10 @@ async function runRealLSTMTest() {
         ? indicators.rsi14[i]?.value ?? indicators.rsi14[i] ?? 0
         : indicators.rsi14 ?? 0;
       
-      const macdVal = indicators.macd && Array.isArray(indicators.macd.MACD)
-        ? indicators.macd.MACD[i]?.value ?? indicators.macd.MACD[i] ?? 0
-        : indicators.macd?.MACD ?? 0;
+      // ✅ FIXED: Use lowercase 'macd' (swing-indicators returns lowercase)
+      const macdVal = indicators.macd && Array.isArray(indicators.macd.macd)
+        ? indicators.macd.macd[i]?.value ?? indicators.macd.macd[i] ?? 0
+        : indicators.macd?.macd ?? 0;
       
       const atrVal = Array.isArray(indicators.atr)
         ? indicators.atr[i]?.value ?? indicators.atr[i] ?? 0
@@ -63,7 +64,7 @@ async function runRealLSTMTest() {
         close: c.close,
         ema20: ema20Val,
         rsi: rsiVal,      // ✅ FIXED: consistent key name (not rsi14)
-        macd: macdVal,
+        macd: macdVal,    // ✅ FIXED: Now extracts properly
         atr: atrVal
       };
     });
