@@ -17,11 +17,13 @@ class SwingSignalClassifier {
     this.reverseLabel = ["BUY", "SELL", "HOLD"];
   }
 
+  // ✅ Safe number parser
   safeNumber(v) {
     if (v === null || v === undefined || isNaN(v)) return 0;
     return Number(v);
   }
 
+  // ✅ Prepare single feature vector
   prepareFeatures(marketData) {
     return [
       this.safeNumber(this.calculateEMATrend(marketData)),
@@ -34,6 +36,7 @@ class SwingSignalClassifier {
     ];
   }
 
+  // ✅ Train model
   async trainModel(historicalData) {
     const trainingData = [];
     const labels = [];
@@ -42,7 +45,6 @@ class SwingSignalClassifier {
       const currentData = historicalData[i];
       const features = this.prepareFeatures(currentData);
 
-      // Sanity check (length must be 7)
       if (features.length !== 7 || features.some(v => v === undefined || Number.isNaN(v))) {
         continue;
       }
@@ -82,6 +84,7 @@ class SwingSignalClassifier {
     console.log("✅ Random Forest Training Completed!");
   }
 
+  // ✅ Predict with manual probability calculation
   predict(currentData) {
     if (!this.model) throw new Error("❌ Model not trained.");
     const features = this.prepareFeatures(currentData);
@@ -90,8 +93,23 @@ class SwingSignalClassifier {
       throw new Error("❌ Invalid feature length for prediction.");
     }
 
-    const predictionIdx = this.model.predict([features])[0];
-    const probabilities = this.model.predictProba([features])[0];
+    // Raw votes from all trees
+    const votes = this.model.estimators.map(tree => tree.predict([features])[0]);
+
+    // Count votes for each label
+    const counts = { 0: 0, 1: 0, 2: 0 };
+    votes.forEach(v => counts[v]++);
+
+    // Normalize counts → probabilities
+    const total = votes.length;
+    const probabilities = [
+      counts[0] / total, // BUY
+      counts[1] / total, // SELL
+      counts[2] / total  // HOLD
+    ];
+
+    // Pick final signal
+    const predictionIdx = probabilities.indexOf(Math.max(...probabilities));
 
     return {
       signal: this.reverseLabel[predictionIdx],
