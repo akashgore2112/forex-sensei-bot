@@ -22,13 +22,23 @@ class VolatilityPredictor {
     const prev = data[i - 1] || current;
 
     if (
-      !current.close || !current.high || !current.low ||
-      !current.atr || !current.rsi || !current.volume ||
-      !current.avgVolume || !current.adx
-    ) {
-      console.warn(`⚠️ Skipped sample @i=${i} → Missing required field(s)`);
-      return null;
-    }
+  !current.close || !current.high || !current.low ||
+  !current.atr || !current.rsi14 ||  // ✅ use rsi14 instead of rsi
+  !current.adx
+) {
+  console.warn(`⚠️ Skipped sample @i=${i} → Missing required field(s)`);
+  return null;
+}
+
+const features = [
+  current.atr,
+  prev.atr > 0 ? (current.atr - prev.atr) / prev.atr : 0,
+  (current.high - current.low) / current.close,
+  prev.rsi14 > 0 ? (current.rsi14 - prev.rsi14) / prev.rsi14 : 0, // ✅ RSI velocity
+  current.avgVolume > 0 ? (current.volume || 1) / current.avgVolume : 1, // ✅ fallback if volume=0
+  this.calculateRecentSwings(data, i, 10),
+  current.adx || 20
+];
 
     const features = [
       current.atr,
