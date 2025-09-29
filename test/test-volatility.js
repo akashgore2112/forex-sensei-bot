@@ -1,6 +1,6 @@
 // ============================================================================
 // 📊 Volatility Predictor Test (Phase 2 - Step 1.3)
-// Updated: Uses Python backend for training + prediction
+// FIXED: Training in Node.js, Prediction via Python on latest candle
 // ============================================================================
 
 const MTFA = require("../mtfa");
@@ -40,9 +40,7 @@ async function processCandles(pair = "EUR/USD") {
       volume: c.volume ?? 0,
       avgVolume:
         i >= 20
-          ? candles
-              .slice(i - 20, i)
-              .reduce((sum, d) => sum + (d.volume || 0), 0) / 20
+          ? candles.slice(i - 20, i).reduce((sum, d) => sum + (d.volume || 0), 0) / 20
           : c.volume || 1,
       rsi: safe(indicators.rsi14),
       atr: safe(indicators.atr),
@@ -66,9 +64,7 @@ async function processCandles(pair = "EUR/USD") {
     return isValid;
   });
 
-  console.log(
-    `📊 Valid samples after filtering: ${validProcessed.length}/${processed.length}`
-  );
+  console.log(`📊 Valid samples after filtering: ${validProcessed.length}/${processed.length}`);
 
   console.log("\n🔍 Sample processed data (first 3 rows):");
   console.log(JSON.stringify(validProcessed.slice(0, 3), null, 2));
@@ -81,7 +77,9 @@ async function processCandles(pair = "EUR/USD") {
 // ============================================================================
 async function predictWithPython(latestCandle) {
   return new Promise((resolve, reject) => {
-    const py = spawn("python3", [path.join(__dirname, "../ml-pipeline/training/volatility_predictor.py")]);
+    const py = spawn("python3", [
+      path.join(__dirname, "../ml-pipeline/models/volatility_predictor.py"),
+    ]);
 
     let output = "";
     let error = "";
@@ -107,6 +105,7 @@ async function predictWithPython(latestCandle) {
       }
     });
 
+    // ✅ Only send latest candle (not entire dataset)
     py.stdin.write(JSON.stringify(latestCandle));
     py.stdin.end();
   });
@@ -119,42 +118,35 @@ async function runVolatilityTest() {
   console.log("🚀 Starting Volatility Predictor Test...");
   console.log(`   Mode: ${forceRetrain ? "FORCE RETRAIN" : "LOAD OR TRAIN"}\n`);
 
-  const modelPath = path.join(__dirname, "../saved-models/volatility-model.xgb");
+  const modelPath = path.join(__dirname, "../saved-models/volatility-model.json");
   const trainer = new VolatilityTrainer();
   let processedData = null;
 
-  // STEP 1: Load or Train Model
+  // STEP 1: Train or Load Model
   if (!forceRetrain && fs.existsSync(modelPath)) {
     try {
       await trainer.loadExistingModel();
       console.log("✅ Pre-trained Volatility model loaded successfully!\n");
     } catch (err) {
       console.warn("⚠️ Failed to load saved model, will retrain instead:", err.message);
+      processedData = await processCandles("EUR/USD");
+      await trainer.trainVolatilityModel(processedData);
     }
   } else {
     processedData = await processCandles("EUR/USD");
 
     if (processedData.length < 500) {
-      throw new Error(
-        `❌ Not enough valid samples to train volatility model (need 500+, got ${processedData.length})`
-      );
+      throw new Error(`❌ Not enough valid samples (need 500+, got ${processedData.length})`);
     }
 
     console.log("\n⚡ Training new volatility model...");
     console.log("──────────────────────────────────────\n");
-
     await trainer.trainVolatilityModel(processedData);
-
     console.log("\n✅ Volatility model training completed!");
-    console.log("══════════════════════════════════════\n");
   }
 
-  // STEP 2: Prediction on latest candle
+  // STEP 2: Prediction with Python
   processedData = processedData || (await processCandles("EUR/USD"));
-  if (!processedData || processedData.length === 0) {
-    throw new Error("❌ No processed data available for prediction");
-  }
-
   const latest = processedData[processedData.length - 1];
   const prediction = await predictWithPython(latest);
 
@@ -180,6 +172,5 @@ async function runVolatilityTest() {
 runVolatilityTest().catch((err) => {
   console.error("\n❌❌❌ FATAL ERROR ❌❌❌");
   console.error(err.message);
-  console.error(err.stack);
   process.exit(1);
 });
