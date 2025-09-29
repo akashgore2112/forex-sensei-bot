@@ -1,5 +1,5 @@
 // test/test-rfc.js
-// 📊 Step 1.2 - Random Forest Classifier Test with MTFA Data + Safe Validation
+// 📊 Step 1.2 - Random Forest Classifier Test with MTFA Data + Progress Logs
 
 const SwingSignalClassifier = require("../ml-pipeline/models/random-forest-classifier");
 const MTFA = require("../mtfa");
@@ -43,7 +43,7 @@ async function runRFCTest() {
 
   console.log(`✅ Processed ${processed.length} candles with indicators`);
 
-  // 4. Filter valid samples (avoid NaN / undefined)
+  // 4. Filter valid samples
   const validProcessed = processed.filter((d, i) => {
     const values = [
       d.close, d.ema20, d.ema50, d.rsi, d.macd?.macd, d.macd?.signal,
@@ -51,7 +51,7 @@ async function runRFCTest() {
     ];
     const isValid = values.every(v => v !== undefined && !Number.isNaN(v));
     if (!isValid) {
-      console.warn(`⚠️ Skipping invalid sample at index ${i}`, d);
+      console.warn(`⚠️ Skipping invalid sample at index ${i}`);
     }
     return isValid;
   });
@@ -64,7 +64,9 @@ async function runRFCTest() {
 
   // 5. Train classifier
   try {
+    console.log("⚡ Training Random Forest Classifier...");
     await classifier.trainModel(validProcessed);
+    console.log("✅ Random Forest Training Completed!");
   } catch (err) {
     console.error("❌ Training failed:", err.message);
     return;
@@ -77,7 +79,9 @@ async function runRFCTest() {
     const prediction = classifier.predict(latestData);
 
     console.log("\n📌 Final Classification Result:");
+    console.log("──────────────────────────────────────");
     console.dir(prediction, { depth: null });
+    console.log("──────────────────────────────────────");
   } catch (err) {
     console.error("❌ Prediction failed:", err.message);
   }
