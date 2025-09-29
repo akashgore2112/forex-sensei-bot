@@ -5,6 +5,7 @@
 # =============================================================================
 
 import os
+import sys
 import json
 import numpy as np
 import xgboost as xgb
@@ -25,7 +26,7 @@ class VolatilityPredictor:
         # Required core fields
         required = ["close", "high", "low", "atr", "rsi", "adx"]
         if any(current.get(f) in [None, 0] for f in required):
-            print(f"⚠️ Skipped sample @i={i} → Missing required core fields")
+            print(f"⚠️ Skipped sample @i={i} → Missing required core fields", file=sys.stderr)
             return None
 
         atr = current["atr"]
@@ -39,7 +40,7 @@ class VolatilityPredictor:
         features = [atr, atr_change, intraday_range, rsi_velocity, vol_ratio, swings, adx]
 
         if not all(np.isfinite(features)):
-            print(f"⚠️ Skipped sample @i={i} → Non-finite feature values {features}")
+            print(f"⚠️ Skipped sample @i={i} → Non-finite feature values {features}", file=sys.stderr)
             return None
 
         return features
@@ -59,12 +60,12 @@ class VolatilityPredictor:
     def calculate_future_volatility(self, data, i, horizon=5):
         future_slice = data[i + 1:i + 1 + horizon]
         if not future_slice:
-            print(f"⚠️ Skipped sample @i={i} → No future candles")
+            print(f"⚠️ Skipped sample @i={i} → No future candles", file=sys.stderr)
             return None
 
         atr_values = [c["atr"] for c in future_slice if c.get("atr") is not None]
         if not atr_values:
-            print(f"⚠️ Skipped sample @i={i} → Future ATR missing")
+            print(f"⚠️ Skipped sample @i={i} → Future ATR missing", file=sys.stderr)
             return None
 
         return np.mean(atr_values)
@@ -207,6 +208,30 @@ class VolatilityPredictor:
         print(f"📂 Model loaded from {filepath}")
 
 
-# Quick test hook
+# =========================================================================
+# 📌 CLI Wrapper (Node.js bridge)
+# =========================================================================
 if __name__ == "__main__":
-    print("✅ VolatilityPredictor Python module ready")
+    vp = VolatilityPredictor()
+    try:
+        # 🔹 Read JSON candle from stdin
+        raw_input = sys.stdin.read().strip()
+        if not raw_input:
+            print(json.dumps({"error": "❌ No input received"}))
+            sys.exit(1)
+
+        candle = json.loads(raw_input)
+
+        # 🔹 Ensure model is loaded
+        model_path = "./saved-models/volatility-model.json"
+        vp.load_model(model_path)
+
+        # 🔹 Run prediction
+        result = vp.predict(candle)
+
+        # 🔹 Print JSON result for Node.js
+        print(json.dumps(result))
+
+    except Exception as e:
+        print(json.dumps({"error": str(e)}))
+        sys.exit(1)
