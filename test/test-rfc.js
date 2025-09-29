@@ -1,5 +1,5 @@
 // test/test-rfc.js
-// 📊 Step 1.2 - Random Forest Classifier Test with MTFA Data
+// 📊 Step 1.2 - Random Forest Classifier Test with MTFA Data + Metrics
 
 const SwingSignalClassifier = require("../ml-pipeline/models/random-forest-classifier");
 const MTFA = require("../mtfa");
@@ -72,8 +72,21 @@ async function runRFCTest() {
   console.log("\n===============================");
   console.log("⚡ [5/6] Training Random Forest Classifier...");
   try {
-    await classifier.trainModel(validProcessed);
+    const metrics = await classifier.trainModel(validProcessed);
     console.log("✅ Random Forest Training Completed!");
+
+    // 📊 Show training metrics
+    if (metrics) {
+      console.log("\n📊 Training Metrics (Test Set Evaluation):");
+      console.log(`   Accuracy: ${(metrics.accuracy * 100).toFixed(2)}%`);
+      console.log(`   Avg F1-Score: ${(metrics.averageF1 * 100).toFixed(2)}%`);
+      console.log("   Per-Class Metrics:");
+      Object.entries(metrics.classMetrics).forEach(([cls, m]) => {
+        console.log(
+          `     ${cls}: Precision=${(m.precision * 100).toFixed(1)}%, Recall=${(m.recall * 100).toFixed(1)}%, F1=${(m.f1Score * 100).toFixed(1)}%`
+        );
+      });
+    }
   } catch (err) {
     console.error("❌ Training failed:", err.message);
     return;
