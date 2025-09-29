@@ -1,103 +1,143 @@
 // test/test-rfc.js
-// 📊 Step 1.2 - Random Forest Classifier Test with MTFA Data + Metrics
+// 📊 Step 1.2 - Random Forest Classifier Test with MTFA Data + Load-or-Train System
 
 const SwingSignalClassifier = require("../ml-pipeline/models/random-forest-classifier");
 const MTFA = require("../mtfa");
 const SwingIndicators = require("../swing-indicators");
+const fs = require("fs");
+const path = require("path");
 
 async function runRFCTest() {
   console.log("🚀 Starting Step 1.2: Random Forest Classifier Test...");
 
   const classifier = new SwingSignalClassifier();
+  const modelPath = path.join(__dirname, "../saved-models/rf-model.json");
 
-  // 1. Fetch MTFA Analysis
-  console.log("\n===============================");
-  console.log("📊 [1/6] Running MTFA to fetch candles + indicators...");
-  const mtfaResult = await MTFA.analyze("EUR/USD");
+  let modelLoaded = false;
+  let latestData = null;
 
-  if (!mtfaResult || !mtfaResult.dailyCandles?.length) {
-    throw new Error("❌ MTFA did not return daily candles. Check Phase 1 system.");
+  // 🔹 Try to load model if it exists
+  if (fs.existsSync(modelPath)) {
+    try {
+      await classifier.loadModel(modelPath);
+      console.log("✅ Pre-trained Random Forest model loaded successfully!");
+      modelLoaded = true;
+    } catch (err) {
+      console.warn("⚠️ Failed to load saved model, will retrain instead:", err.message);
+    }
   }
 
-  const candles = mtfaResult.dailyCandles;
-  console.log(`✅ Got ${candles.length} daily candles from MTFA`);
+  // 🔹 If model not loaded → retrain
+  if (!modelLoaded) {
+    // 1. Fetch MTFA Analysis
+    console.log("\n===============================");
+    console.log("📊 [1/6] Running MTFA to fetch candles + indicators...");
+    const mtfaResult = await MTFA.analyze("EUR/USD");
 
-  // 2. Recalculate indicators
-  console.log("\n===============================");
-  console.log("📈 [2/6] Calculating indicators on MTFA candles...");
-  const indicators = await SwingIndicators.calculateAll(candles);
-
-  // 3. Merge candles + indicators
-  console.log("\n===============================");
-  console.log("🔄 [3/6] Merging candles with indicators...");
-  const processed = candles.map((c, i) => ({
-    close: c.close,
-    ema20: Array.isArray(indicators.ema20) ? indicators.ema20[i] : indicators.ema20,
-    ema50: Array.isArray(indicators.ema50) ? indicators.ema50[i] : indicators.ema50,
-    rsi: Array.isArray(indicators.rsi14) ? indicators.rsi14[i] : indicators.rsi14,
-    macd:
-      indicators.macd && Array.isArray(indicators.macd.MACD)
-        ? { macd: indicators.macd.MACD[i], signal: indicators.macd.signal[i] }
-        : indicators.macd || { macd: 0, signal: 0 },
-    atr: Array.isArray(indicators.atr) ? indicators.atr[i] : indicators.atr,
-    volume: c.volume || 1000,
-    avgVolume: 1000,
-    prevClose: candles[i - 1]?.close || c.close,
-  }));
-
-  console.log(`✅ Processed ${processed.length} candles with indicators`);
-
-  // 4. Filter valid samples
-  console.log("\n===============================");
-  console.log("🧹 [4/6] Filtering invalid samples...");
-  const validProcessed = processed.filter((d, i) => {
-    const values = [
-      d.close, d.ema20, d.ema50, d.rsi, d.macd?.macd, d.macd?.signal,
-      d.atr, d.volume, d.avgVolume, d.prevClose,
-    ];
-    const isValid = values.every(v => v !== undefined && !Number.isNaN(v));
-    if (!isValid) {
-      console.warn(`⚠️ Skipping invalid sample at index ${i}`);
+    if (!mtfaResult || !mtfaResult.dailyCandles?.length) {
+      throw new Error("❌ MTFA did not return daily candles. Check Phase 1 system.");
     }
-    return isValid;
-  });
 
-  console.log(`📊 Valid samples after filtering: ${validProcessed.length}`);
+    const candles = mtfaResult.dailyCandles;
+    console.log(`✅ Got ${candles.length} daily candles from MTFA`);
 
-  if (validProcessed.length < 200) {
-    throw new Error("❌ Not enough valid samples for training Random Forest.");
-  }
+    // 2. Recalculate indicators
+    console.log("\n===============================");
+    console.log("📈 [2/6] Calculating indicators on MTFA candles...");
+    const indicators = await SwingIndicators.calculateAll(candles);
 
-  // 5. Train classifier
-  console.log("\n===============================");
-  console.log("⚡ [5/6] Training Random Forest Classifier...");
-  try {
-    const metrics = await classifier.trainModel(validProcessed);
-    console.log("✅ Random Forest Training Completed!");
+    // 3. Merge candles + indicators
+    console.log("\n===============================");
+    console.log("🔄 [3/6] Merging candles with indicators...");
+    const processed = candles.map((c, i) => ({
+      close: c.close,
+      ema20: Array.isArray(indicators.ema20) ? indicators.ema20[i] : indicators.ema20,
+      ema50: Array.isArray(indicators.ema50) ? indicators.ema50[i] : indicators.ema50,
+      rsi: Array.isArray(indicators.rsi14) ? indicators.rsi14[i] : indicators.rsi14,
+      macd:
+        indicators.macd && Array.isArray(indicators.macd.MACD)
+          ? { macd: indicators.macd.MACD[i], signal: indicators.macd.signal[i] }
+          : indicators.macd || { macd: 0, signal: 0 },
+      atr: Array.isArray(indicators.atr) ? indicators.atr[i] : indicators.atr,
+      volume: c.volume || 1000,
+      avgVolume: 1000,
+      prevClose: candles[i - 1]?.close || c.close,
+    }));
 
-    // 📊 Show training metrics
-    if (metrics) {
-      console.log("\n📊 Training Metrics (Test Set Evaluation):");
-      console.log(`   Accuracy: ${(metrics.accuracy * 100).toFixed(2)}%`);
-      console.log(`   Avg F1-Score: ${(metrics.averageF1 * 100).toFixed(2)}%`);
-      console.log("   Per-Class Metrics:");
-      Object.entries(metrics.classMetrics).forEach(([cls, m]) => {
-        console.log(
-          `     ${cls}: Precision=${(m.precision * 100).toFixed(1)}%, Recall=${(m.recall * 100).toFixed(1)}%, F1=${(m.f1Score * 100).toFixed(1)}%`
-        );
-      });
+    console.log(`✅ Processed ${processed.length} candles with indicators`);
+
+    // 4. Filter valid samples
+    console.log("\n===============================");
+    console.log("🧹 [4/6] Filtering invalid samples...");
+    const validProcessed = processed.filter((d, i) => {
+      const values = [
+        d.close, d.ema20, d.ema50, d.rsi, d.macd?.macd, d.macd?.signal,
+        d.atr, d.volume, d.avgVolume, d.prevClose,
+      ];
+      const isValid = values.every(v => v !== undefined && !Number.isNaN(v));
+      if (!isValid) {
+        console.warn(`⚠️ Skipping invalid sample at index ${i}`);
+      }
+      return isValid;
+    });
+
+    console.log(`📊 Valid samples after filtering: ${validProcessed.length}`);
+
+    if (validProcessed.length < 200) {
+      throw new Error("❌ Not enough valid samples for training Random Forest.");
     }
-  } catch (err) {
-    console.error("❌ Training failed:", err.message);
-    return;
+
+    // 5. Train classifier
+    console.log("\n===============================");
+    console.log("⚡ [5/6] Training Random Forest Classifier...");
+    try {
+      const metrics = await classifier.trainModel(validProcessed);
+      console.log("✅ Random Forest Training Completed!");
+
+      // 📊 Show training metrics
+      if (metrics) {
+        console.log("\n📊 Training Metrics (Test Set Evaluation):");
+        console.log(`   Accuracy: ${(metrics.accuracy * 100).toFixed(2)}%`);
+        console.log(`   Avg F1-Score: ${(metrics.averageF1 * 100).toFixed(2)}%`);
+        console.log("   Per-Class Metrics:");
+        Object.entries(metrics.classMetrics).forEach(([cls, m]) => {
+          console.log(
+            `     ${cls}: Precision=${(m.precision * 100).toFixed(1)}%, Recall=${(m.recall * 100).toFixed(1)}%, F1=${(m.f1Score * 100).toFixed(1)}%`
+          );
+        });
+      }
+
+      // 🔹 Save trained model
+      await classifier.saveModel(modelPath);
+
+      // 🔹 Save last processed candle for prediction
+      latestData = validProcessed[validProcessed.length - 1];
+    } catch (err) {
+      console.error("❌ Training failed:", err.message);
+      return;
+    }
   }
 
   // 6. Predict last candle
   console.log("\n===============================");
   console.log("🔮 [6/6] Making classification on last candle...");
   try {
-    const latestData = validProcessed[validProcessed.length - 1];
-    const prediction = classifier.predict(latestData);
+    // Use last processed candle if available, else dummy
+    const dataForPrediction =
+      latestData ||
+      {
+        close: 1.09,
+        ema20: 1.1,
+        ema50: 1.08,
+        rsi: 55,
+        macd: { macd: 0.002, signal: 0.001 },
+        atr: 0.009,
+        volume: 1200,
+        avgVolume: 1000,
+        prevClose: 1.085,
+      };
+
+    const prediction = classifier.predict(dataForPrediction);
 
     console.log("\n📌 Final Classification Result:");
     console.log("──────────────────────────────────────");
