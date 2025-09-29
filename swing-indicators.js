@@ -8,17 +8,15 @@ class SwingIndicators {
     const highs = data.map(d => d.high);
     const lows = data.map(d => d.low);
 
-    // Helper wrapper for indicators that return `outReal`
     const runOutReal = (name, params) => {
       return new Promise((resolve, reject) => {
         talib.execute({ name, ...params }, (err, result) => {
           if (err) return reject(err);
-          resolve(result.result.outReal || []); // Ensure we always get array
+          resolve(result.result.outReal || []);
         });
       });
     };
 
-    // Direct run for indicators with multiple outputs (MACD, BBANDS)
     const runRaw = (name, params) => {
       return new Promise((resolve, reject) => {
         talib.execute({ name, ...params }, (err, result) => {
@@ -28,36 +26,36 @@ class SwingIndicators {
       });
     };
 
-    // ✅ Indicators with TA-Lib
-    const ema20 = await runOutReal("EMA", {
+    // Calculate indicators
+    const ema20Raw = await runOutReal("EMA", {
       startIdx: 0,
       endIdx: closes.length - 1,
       inReal: closes,
       optInTimePeriod: 20
     });
 
-    const ema50 = await runOutReal("EMA", {
+    const ema50Raw = await runOutReal("EMA", {
       startIdx: 0,
       endIdx: closes.length - 1,
       inReal: closes,
       optInTimePeriod: 50
     });
 
-    const ema200 = await runOutReal("EMA", {
+    const ema200Raw = await runOutReal("EMA", {
       startIdx: 0,
       endIdx: closes.length - 1,
       inReal: closes,
       optInTimePeriod: 200
     });
 
-    const rsi14 = await runOutReal("RSI", {
+    const rsi14Raw = await runOutReal("RSI", {
       startIdx: 0,
       endIdx: closes.length - 1,
       inReal: closes,
       optInTimePeriod: 14
     });
 
-    const macd = await runRaw("MACD", {
+    const macdRaw = await runRaw("MACD", {
       startIdx: 0,
       endIdx: closes.length - 1,
       inReal: closes,
@@ -66,7 +64,7 @@ class SwingIndicators {
       optInSignalPeriod: 9
     });
 
-    const adx = await runOutReal("ADX", {
+    const adxRaw = await runOutReal("ADX", {
       startIdx: 0,
       endIdx: closes.length - 1,
       high: highs,
@@ -75,7 +73,7 @@ class SwingIndicators {
       optInTimePeriod: 14
     });
 
-    const atr = await runOutReal("ATR", {
+    const atrRaw = await runOutReal("ATR", {
       startIdx: 0,
       endIdx: closes.length - 1,
       high: highs,
@@ -84,42 +82,47 @@ class SwingIndicators {
       optInTimePeriod: 14
     });
 
-    const bollinger = await runRaw("BBANDS", {
+    const bollingerRaw = await runRaw("BBANDS", {
       startIdx: 0,
       endIdx: closes.length - 1,
       inReal: closes,
       optInTimePeriod: 20,
       optInNbDevUp: 2,
       optInNbDevDn: 2,
-      optInMAType: 0 // SMA
+      optInMAType: 0
     });
 
-    // ✅ Support/Resistance logic
-    const supportResistance = this.calculateSupportResistance(data);
+    // Pad arrays to match candle length
+    const padArray = (arr, skipDays, totalLength) => {
+      const padded = new Array(totalLength).fill(null);
+      for (let i = 0; i < arr.length; i++) {
+        padded[skipDays + i] = arr[i];
+      }
+      return padded;
+    };
 
-    // ✅ Final structured output
+    // Return arrays for each candle
     return {
-      ema20: ema20[ema20.length - 1],
-      ema50: ema50[ema50.length - 1],
-      ema200: ema200[ema200.length - 1],
-      rsi14: rsi14[rsi14.length - 1],
+      ema20: padArray(ema20Raw, 19, data.length),
+      ema50: padArray(ema50Raw, 49, data.length),
+      ema200: padArray(ema200Raw, 199, data.length),
+      rsi14: padArray(rsi14Raw, 14, data.length),
       macd: {
-        macd: macd.outMACD[macd.outMACD.length - 1],
-        signal: macd.outMACDSignal[macd.outMACDSignal.length - 1],
-        histogram: macd.outMACDHist[macd.outMACDHist.length - 1]
+        macd: padArray(macdRaw.outMACD, 33, data.length),
+        signal: padArray(macdRaw.outMACDSignal, 33, data.length),
+        histogram: padArray(macdRaw.outMACDHist, 33, data.length)
       },
-      adx: adx[adx.length - 1],
-      atr: atr[atr.length - 1],
+      adx: padArray(adxRaw, 27, data.length),
+      atr: padArray(atrRaw, 14, data.length),
       bollinger: {
-        upper: bollinger.outRealUpperBand[bollinger.outRealUpperBand.length - 1],
-        middle: bollinger.outRealMiddleBand[bollinger.outRealMiddleBand.length - 1],
-        lower: bollinger.outRealLowerBand[bollinger.outRealLowerBand.length - 1]
+        upper: padArray(bollingerRaw.outRealUpperBand, 19, data.length),
+        middle: padArray(bollingerRaw.outRealMiddleBand, 19, data.length),
+        lower: padArray(bollingerRaw.outRealLowerBand, 19, data.length)
       },
-      supportResistance
+      supportResistance: this.calculateSupportResistance(data)
     };
   }
 
-  // 🔍 Advanced Support/Resistance Logic
   static calculateSupportResistance(data, lookback = 50) {
     const highs = data.map(d => d.high);
     const lows = data.map(d => d.low);
@@ -152,12 +155,8 @@ class SwingIndicators {
       .map(level => ({
         level,
         touches: countTouches(level, lows),
-        strength:
-          countTouches(level, lows) >= 3
-            ? "STRONG"
-            : countTouches(level, lows) === 2
-            ? "MEDIUM"
-            : "WEAK"
+        strength: countTouches(level, lows) >= 3 ? "STRONG" : 
+                  countTouches(level, lows) === 2 ? "MEDIUM" : "WEAK"
       }))
       .sort((a, b) => a.level - b.level);
 
@@ -165,12 +164,8 @@ class SwingIndicators {
       .map(level => ({
         level,
         touches: countTouches(level, highs),
-        strength:
-          countTouches(level, highs) >= 3
-            ? "STRONG"
-            : countTouches(level, highs) === 2
-            ? "MEDIUM"
-            : "WEAK"
+        strength: countTouches(level, highs) >= 3 ? "STRONG" : 
+                  countTouches(level, highs) === 2 ? "MEDIUM" : "WEAK"
       }))
       .sort((a, b) => a.level - b.level);
 
