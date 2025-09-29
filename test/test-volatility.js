@@ -5,7 +5,7 @@
 const MTFA = require("../mtfa");
 const SwingIndicators = require("../swing-indicators");
 const VolatilityPredictor = require("../ml-pipeline/models/volatility-predictor");
-const trainVolatilityModel = require("../ml-pipeline/training/volatility-trainer");
+const VolatilityTrainer = require("../ml-pipeline/training/volatility-trainer");
 
 const fs = require("fs");
 const path = require("path");
@@ -76,6 +76,7 @@ async function runVolatilityTest() {
 
   const modelPath = path.join(__dirname, "../saved-models/volatility-model.json");
   const predictor = new VolatilityPredictor();
+  const trainer = new VolatilityTrainer();
 
   let processedData = null;
   let modelLoaded = false;
@@ -107,7 +108,7 @@ async function runVolatilityTest() {
     console.log("\n⚡ Training new volatility model...");
     console.log("──────────────────────────────────────\n");
 
-    await trainVolatilityModel(predictor, processedData);
+    await trainer.trainVolatilityModel(processedData);
     await predictor.saveModel(modelPath);
 
     console.log("\n✅ Volatility model training completed!");
@@ -116,7 +117,7 @@ async function runVolatilityTest() {
     processedData = await processCandles("EUR/USD");
   }
 
-  // STEP 3: Prediction on latest candle
+  // STEP 3: Prediction on latest data
   console.log("═══════════════════════════════════════");
   console.log("       PREDICTION ON LATEST DATA");
   console.log("═══════════════════════════════════════\n");
@@ -125,19 +126,16 @@ async function runVolatilityTest() {
     throw new Error("❌ No processed data available for prediction");
   }
 
-  const latestData = processedData[processedData.length - 1];
-
-  console.log("🔮 Making volatility prediction...");
-  console.log(`   Close: ${latestData.close}`);
+  console.log("🔮 Making volatility prediction on latest candle...");
 
   try {
-    const prediction = predictor.predict(latestData);
+    const prediction = predictor.predict(processedData);
 
     console.log("\n📌 VOLATILITY FORECAST:");
     console.log("──────────────────────────────────────");
     console.log(`   Predicted Volatility: ${prediction.predictedVolatility.toFixed(5)}`);
     console.log(`   Current Volatility:   ${prediction.currentVolatility.toFixed(5)}`);
-    console.log(`   Percent Change:       ${(prediction.percentChange * 100).toFixed(2)}%`);
+    console.log(`   Percent Change:       ${prediction.percentChange.toFixed(2)}%`);
     console.log(`   Volatility Level:     ${prediction.volatilityLevel}`);
     console.log(`   Risk Adjustment:      ${prediction.riskAdjustment.toFixed(2)}x`);
     console.log(`   Confidence:           ${(prediction.confidence * 100).toFixed(1)}%`);
