@@ -1,5 +1,5 @@
 // test/test-rfc.js
-// 📊 Step 1.2 - Random Forest Classifier Test with MTFA Data + Training Progress Logs
+// 📊 Step 1.2 - Random Forest Classifier Test with MTFA Data
 
 const SwingSignalClassifier = require("../ml-pipeline/models/random-forest-classifier");
 const MTFA = require("../mtfa");
@@ -68,25 +68,11 @@ async function runRFCTest() {
     throw new Error("❌ Not enough valid samples for training Random Forest.");
   }
 
-  // 5. Train classifier with simulated progress
+  // 5. Train classifier
   console.log("\n===============================");
   console.log("⚡ [5/6] Training Random Forest Classifier...");
-
   try {
-    // Simulated progress log (like epochs in LSTM)
-    const totalTrees = 100;
-    for (let t = 1; t <= totalTrees; t++) {
-      if (t === 1) {
-        console.log(`🌲 Training started... total trees = ${totalTrees}`);
-      }
-      if (t % 10 === 0 || t === totalTrees) {
-        console.log(`📉 Tree ${t}/${totalTrees} trained...`);
-      }
-    }
-
-    // Actual training
     await classifier.trainModel(validProcessed);
-
     console.log("✅ Random Forest Training Completed!");
   } catch (err) {
     console.error("❌ Training failed:", err.message);
