@@ -1,87 +1,52 @@
 // ml-pipeline/training/volatility-trainer.js
-// 📊 Training pipeline for Volatility Predictor
-
-const VolatilityPredictor = require("../models/volatility-predictor");
 const MTFA = require("../../mtfa");
 const SwingIndicators = require("../../swing-indicators");
-const fs = require("fs");
-const path = require("path");
+const VolatilityPredictor = require("../models/volatility-predictor");
 
-const modelPath = path.join(__dirname, "../../saved-models/volatility-model.json");
+async function prepareData(pair = "EUR/USD") {
+  console.log(`📊 Fetching data for ${pair}...`);
+  const mtfa = await MTFA.analyze(pair);
 
-// Helper: merge candles + indicators
-function mergeData(candles, indicators) {
+  if (!mtfa?.dailyCandles?.length) {
+    throw new Error("❌ No daily candles returned from MTFA!");
+  }
+
+  const candles = mtfa.dailyCandles;
+  const indicators = await SwingIndicators.calculateAll(candles);
+
   return candles.map((c, i) => ({
-    date: c.date,
     close: c.close,
     high: c.high,
     low: c.low,
     volume: c.volume,
-    avgVolume: indicators.avgVolume?.[i] || c.volume,
     atr: indicators.atr?.[i] || 0,
-    rsi: indicators.rsi?.[i] || 50,
-    adx: indicators.adx?.[i] || 20
+    rsi: indicators.rsi14?.[i] || 50,
+    adx: indicators.adx?.[i] || 20,
+    avgVolume:
+      candles
+        .slice(Math.max(0, i - 20), i)
+        .map(x => x.volume || 0)
+        .reduce((a, b) => a + b, 0) / Math.min(i || 1, 20)
   }));
 }
 
-async function trainVolatilityModel(forceRetrain = false, pair = "EUR/USD") {
+async function trainVolatilityModel() {
   const predictor = new VolatilityPredictor();
+  const data = await prepareData("EUR/USD");
 
-  // Load if exists
-  if (!forceRetrain && fs.existsSync(modelPath)) {
-    try {
-      await predictor.loadModel(modelPath);
-      console.log("✅ Loaded existing Volatility Model");
-      return predictor;
-    } catch (err) {
-      console.warn("⚠️ Failed to load model, retraining instead:", err.message);
-    }
-  }
+  console.log(`✅ Prepared ${data.length} candles for training`);
 
-  // Fetch MTFA data
-  console.log(`📡 Fetching MTFA data for ${pair}...`);
-  const mtfaResult = await MTFA.analyze(pair);
+  const metrics = await predictor.trainModel(data);
+  await predictor.saveModel("./saved-models/volatility-model.json");
 
-  if (!mtfaResult?.dailyCandles?.length) {
-    throw new Error("❌ No daily candles returned from MTFA");
-  }
+  return metrics;
+}
 
-  const candles = mtfaResult.dailyCandles;
-  console.log(`✅ Got ${candles.length} daily candles`);
-
-  // Calculate indicators
-  console.log("📈 Calculating indicators...");
-  const indicators = await SwingIndicators.calculateAll(candles);
-
-  // Merge
-  console.log("🔄 Merging candles + indicators...");
-  const processed = mergeData(candles, indicators);
-
-  // Filter valid
-  const validData = processed.filter(d =>
-    d.close && d.atr && d.rsi && d.adx && d.volume
-  );
-
-  console.log(`✅ Valid samples: ${validData.length}/${processed.length}`);
-
-  if (validData.length < 300) {
-    throw new Error("❌ Not enough valid samples to train volatility model (need 300+)");
-  }
-
-  // Train
-  console.log("⚡ Training Volatility Predictor...");
-  const metrics = await predictor.trainModel(validData);
-
-  console.log("📊 Training Results:");
-  console.log(`   Samples: ${metrics.samples}`);
-  console.log(`   MAE: ${metrics.mae.toFixed(5)}`);
-  console.log(`   MAE%: ${metrics.maePercent.toFixed(2)}%`);
-
-  // Save
-  await predictor.saveModel(modelPath);
-  console.log(`💾 Model saved to ${modelPath}`);
-
-  return predictor;
+if (require.main === module) {
+  trainVolatilityModel().catch(err => {
+    console.error("❌ Training failed:", err);
+    process.exit(1);
+  });
 }
 
 module.exports = { trainVolatilityModel };
