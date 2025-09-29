@@ -1,6 +1,7 @@
 // ============================================================================
 // ⚡ Training pipeline for Volatility Predictor (Phase 2 - Step 1.3)
-// Uses ml-xgboost booster API
+// Updated: Array-based training (no DMatrix usage)
+// Diagnostic mode enabled for transparency
 // ============================================================================
 
 const fs = require("fs");
@@ -24,18 +25,23 @@ class VolatilityTrainer {
       );
     }
 
-    console.log(`\n📊 Starting volatility model training on ${historicalData.length} candles...`);
+    console.log("\n───────────────────────────────────────────────");
+    console.log(`📊 Starting volatility model training...`);
+    console.log(`   Input candles: ${historicalData.length}`);
+    console.log("───────────────────────────────────────────────\n");
 
+    // 🔥 Call predictor training
     const metrics = await this.predictor.trainModel(historicalData);
 
     console.log("\n📈 Training Summary:");
-    console.log(`   Total Samples:   ${metrics.samples}`);
-    console.log(`   Train Size:      ${metrics.trainSize}`);
-    console.log(`   Test Size:       ${metrics.testSize}`);
-    console.log(`   Mean Abs. Error: ${metrics.meanAbsoluteError.toFixed(6)}\n`);
+    console.log(`   ✅ Total Samples:   ${metrics.samples}`);
+    console.log(`   ✅ Train Size:      ${metrics.trainSize}`);
+    console.log(`   ✅ Test Size:       ${metrics.testSize}`);
+    console.log(`   📉 Mean Abs. Error: ${metrics.meanAbsoluteError.toFixed(6)}\n`);
 
+    // Save model
     await this.predictor.saveModel(this.modelPath);
-    console.log(`✅ Volatility model saved to: ${this.modelPath}`);
+    console.log(`💾 Volatility model saved to: ${this.modelPath}`);
 
     return metrics;
   }
