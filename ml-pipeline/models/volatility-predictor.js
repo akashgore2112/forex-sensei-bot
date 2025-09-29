@@ -1,6 +1,6 @@
 // ============================================================================
 // 📊 XGBoost Volatility Predictor (using ml-xgboost booster API)
-// Phase 2 - Step 1.3 (Diagnostic Mode Enabled)
+// Phase 2 - Step 1.3 (Fixed: Direct array training, no DMatrix)
 // ============================================================================
 
 const fs = require("fs");
@@ -31,7 +31,7 @@ class VolatilityPredictor {
     }
 
     const features = [
-      current.atr, 
+      current.atr,
       prev.atr > 0 ? (current.atr - prev.atr) / prev.atr : 0,
       (current.high - current.low) / current.close,
       prev.rsi > 0 ? (current.rsi - prev.rsi) / prev.rsi : 0,
@@ -40,7 +40,6 @@ class VolatilityPredictor {
       current.adx || 20
     ];
 
-    // log if any feature is NaN
     if (features.some(v => !Number.isFinite(v))) {
       console.warn(`⚠️ Skipped sample @i=${i} → Non-finite feature: ${JSON.stringify(features)}`);
       return null;
@@ -55,7 +54,6 @@ class VolatilityPredictor {
       const prev = data[j - 1];
       const curr = data[j];
       if (!prev || !curr) continue;
-
       const change = Math.abs(curr.close - prev.close) / prev.close;
       if (change > 0.005) swings++;
     }
@@ -115,9 +113,7 @@ class VolatilityPredictor {
 
     console.log("⚡ Training XGBoost regressor...");
 
-    const dtrain = new xgboost.DMatrix(X_train, y_train);
-    const dtest = new xgboost.DMatrix(X_test, y_test);
-
+    // ✅ Direct arrays (no DMatrix!)
     this.booster = await xgboost.train(
       {
         objective: "reg:squarederror",
@@ -127,12 +123,12 @@ class VolatilityPredictor {
         subsample: 0.8,
         colsample_bytree: 0.8,
       },
-      dtrain,
-      200,
-      { evals: [[dtest, "test"]] }
+      X_train,
+      y_train
     );
 
-    const preds = this.booster.predict(dtest);
+    // Evaluate test MAE
+    const preds = this.booster.predict(X_test);
     const mae =
       preds.reduce((sum, p, i) => sum + Math.abs(p - y_test[i]), 0) /
       y_test.length;
@@ -152,8 +148,94 @@ class VolatilityPredictor {
     return this.trainingMetrics;
   }
 
-  // rest of your predict, categorizeVolatility, calculateRiskAdjustment, saveModel, loadModel unchanged
-  // ...
+  // ==========================================================================
+  // 📌 Prediction
+  // ==========================================================================
+  predict(currentData) {
+    if (!this.trained || !this.booster) {
+      throw new Error("❌ Model not trained or loaded");
+    }
+
+    const f = Array.isArray(currentData)
+      ? this.prepareFeatures(currentData, currentData.length - 1)
+      : this.prepareFeatures([currentData], 0);
+
+    if (!f) throw new Error("❌ Invalid input for prediction");
+
+    const predictedVolatility = this.booster.predict([f])[0];
+    const currentVolatility = Array.isArray(currentData)
+      ? currentData[currentData.length - 1].atr || 0
+      : currentData.atr || 0;
+
+    const percentChange =
+      currentVolatility > 0
+        ? ((predictedVolatility - currentVolatility) / currentVolatility) * 100
+        : 0;
+
+    return {
+      predictedVolatility,
+      volatilityLevel: this.categorizeVolatility(predictedVolatility, currentData),
+      riskAdjustment: this.calculateRiskAdjustment(predictedVolatility),
+      confidence: 1 - Math.min(1, Math.abs(percentChange) / 100),
+      currentVolatility,
+      percentChange,
+      recommendation:
+        predictedVolatility > currentVolatility
+          ? "REDUCE_POSITION"
+          : "NORMAL_POSITION",
+    };
+  }
+
+  categorizeVolatility(predictedVolatility, data) {
+    const lastClose = Array.isArray(data)
+      ? data[data.length - 1]?.close || 1
+      : data.close || 1;
+
+    const ratio = predictedVolatility / lastClose;
+
+    if (ratio < 0.005) return "LOW";
+    if (ratio < 0.01) return "MEDIUM";
+    return "HIGH";
+  }
+
+  calculateRiskAdjustment(volatility) {
+    if (volatility <= 0) return 1.0;
+    if (volatility < 0.005) return 2.0;
+    if (volatility < 0.01) return 1.2;
+    return 0.5;
+  }
+
+  // ==========================================================================
+  // 📌 Save / Load
+  // ==========================================================================
+  async saveModel(filepath = "./saved-models/volatility-model.json") {
+    if (!this.booster) throw new Error("❌ No model to save");
+
+    const boosterJSON = await this.booster.toJSON();
+    const saveObj = {
+      boosterJSON,
+      trainedAt: new Date().toISOString(),
+      trainingMetrics: this.trainingMetrics,
+    };
+
+    await fs.promises.writeFile(filepath, JSON.stringify(saveObj));
+    console.log(`💾 Volatility model saved to ${filepath}`);
+  }
+
+  async loadModel(filepath = "./saved-models/volatility-model.json") {
+    if (!fs.existsSync(filepath)) {
+      throw new Error("❌ Saved model not found");
+    }
+
+    const raw = await fs.promises.readFile(filepath, "utf8");
+    const parsed = JSON.parse(raw);
+
+    this.booster = await xgboost.Booster.loadModel(parsed.boosterJSON);
+    this.trainingMetrics = parsed.trainingMetrics || null;
+    this.trained = true;
+
+    console.log(`📂 Volatility model loaded from ${filepath}`);
+  }
 }
 
 module.exports = VolatilityPredictor;
