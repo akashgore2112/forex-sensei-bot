@@ -1,6 +1,7 @@
 const talib = require("talib");
 
 class SwingIndicators {
+  // Returns arrays for each candle (for ML training)
   static async calculateAll(data) {
     if (!data || data.length === 0) return {};
 
@@ -26,7 +27,6 @@ class SwingIndicators {
       });
     };
 
-    // Calculate indicators
     const ema20Raw = await runOutReal("EMA", {
       startIdx: 0,
       endIdx: closes.length - 1,
@@ -92,7 +92,6 @@ class SwingIndicators {
       optInMAType: 0
     });
 
-    // Pad arrays to match candle length
     const padArray = (arr, skipDays, totalLength) => {
       const padded = new Array(totalLength).fill(null);
       for (let i = 0; i < arr.length; i++) {
@@ -101,7 +100,6 @@ class SwingIndicators {
       return padded;
     };
 
-    // Return arrays for each candle
     return {
       ema20: padArray(ema20Raw, 19, data.length),
       ema50: padArray(ema50Raw, 49, data.length),
@@ -120,6 +118,39 @@ class SwingIndicators {
         lower: padArray(bollingerRaw.outRealLowerBand, 19, data.length)
       },
       supportResistance: this.calculateSupportResistance(data)
+    };
+  }
+
+  // Returns single values (latest only) for MTFA
+  static async calculateCurrent(data) {
+    const all = await this.calculateAll(data);
+    
+    const getLastValue = (arr) => {
+      if (!arr || arr.length === 0) return null;
+      for (let i = arr.length - 1; i >= 0; i--) {
+        if (arr[i] !== null && arr[i] !== undefined) return arr[i];
+      }
+      return null;
+    };
+
+    return {
+      ema20: getLastValue(all.ema20),
+      ema50: getLastValue(all.ema50),
+      ema200: getLastValue(all.ema200),
+      rsi14: getLastValue(all.rsi14),
+      macd: {
+        macd: getLastValue(all.macd.macd),
+        signal: getLastValue(all.macd.signal),
+        histogram: getLastValue(all.macd.histogram)
+      },
+      adx: getLastValue(all.adx),
+      atr: getLastValue(all.atr),
+      bollinger: {
+        upper: getLastValue(all.bollinger.upper),
+        middle: getLastValue(all.bollinger.middle),
+        lower: getLastValue(all.bollinger.lower)
+      },
+      supportResistance: all.supportResistance
     };
   }
 
