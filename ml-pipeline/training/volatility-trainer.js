@@ -1,45 +1,62 @@
 // ============================================================================
-// ⚡ Volatility Predictor Wrapper (Statistical Model - No Training)
-// Phase 2 - Step 1.3
+// ⚡ Training pipeline for Volatility Predictor (Phase 2 - Step 1.3)
+// Uses ml-xgboost booster API
 // ============================================================================
 
+const fs = require("fs");
+const path = require("path");
 const VolatilityPredictor = require("../models/volatility-predictor");
 
 class VolatilityTrainer {
   constructor() {
     this.predictor = new VolatilityPredictor();
+    this.modelPath = path.join(__dirname, "../../saved-models/volatility-model.json");
   }
 
   /**
-   * Statistical model doesn't need training
-   * This method exists for API compatibility
+   * 📌 Train model with historical market data
+   * @param {Array} historicalData - Array of candle objects with indicators
    */
   async trainVolatilityModel(historicalData) {
-    console.log("\n📊 Statistical Volatility Model");
-    console.log("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
-    console.log("✅ No training required!");
-    console.log("📈 Model calculates volatility in real-time from data");
-    console.log(`📊 Data available: ${historicalData.length} candles\n`);
+    if (!historicalData || historicalData.length < 500) {
+      throw new Error(
+        `❌ Not enough candles. Got ${historicalData?.length || 0}, need at least 500`
+      );
+    }
 
-    return {
-      message: "Statistical model ready - no training needed",
-      dataPoints: historicalData.length,
-      ready: true
-    };
+    console.log(`\n📊 Starting volatility model training on ${historicalData.length} candles...`);
+
+    const metrics = await this.predictor.trainModel(historicalData);
+
+    console.log("\n📈 Training Summary:");
+    console.log(`   Total Samples:   ${metrics.samples}`);
+    console.log(`   Train Size:      ${metrics.trainSize}`);
+    console.log(`   Test Size:       ${metrics.testSize}`);
+    console.log(`   Mean Abs. Error: ${metrics.meanAbsoluteError.toFixed(6)}\n`);
+
+    await this.predictor.saveModel(this.modelPath);
+    console.log(`✅ Volatility model saved to: ${this.modelPath}`);
+
+    return metrics;
   }
 
   /**
-   * Get predictor instance (always ready)
+   * 📌 Load existing model from disk
    */
-  getPredictor() {
+  async loadExistingModel() {
+    console.log(`📂 Loading saved volatility model from ${this.modelPath}...`);
+    await this.predictor.loadModel(this.modelPath);
+    console.log("✅ Model loaded successfully!");
     return this.predictor;
   }
 
   /**
-   * No model file to load (for compatibility)
+   * 📌 Get predictor instance (after training or loading)
    */
-  async loadExistingModel() {
-    console.log("✅ Statistical model ready (no loading needed)");
+  getPredictor() {
+    if (!this.predictor.trained) {
+      throw new Error("❌ Predictor not trained or loaded yet.");
+    }
     return this.predictor;
   }
 }
