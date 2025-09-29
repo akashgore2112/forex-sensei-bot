@@ -1,7 +1,6 @@
-// 📊 Volatility Predictor using XGBoost (ml-xgboost)
+// ml-pipeline/models/volatility-predictor.js
 const fs = require("fs");
-const path = require("path");
-const xgboost = require("ml-xgboost");
+const XGBoost = require("ml-xgboost");
 
 class VolatilityPredictor {
   constructor() {
@@ -9,195 +8,164 @@ class VolatilityPredictor {
     this.normalizer = null;
   }
 
-  // ✅ Extract features from historical candle
-  prepareFeatures(data, i) {
-    const current = data[i];
-    const prev = data[i - 1] || current;
+  // ============= FEATURE ENGINEERING =============
+  prepareFeatures(data, index) {
+    const c = data[index];
+    const prev = data[index - 1] || c;
 
-    const atrChange =
-      prev.atr > 0 ? (current.atr - prev.atr) / prev.atr : 0;
-
-    const priceRange =
-      current.close > 0 ? (current.high - current.low) / current.close : 0;
-
-    const rsiVelocity =
-      prev.rsi > 0 ? (current.rsi - prev.rsi) / prev.rsi : 0;
-
-    const volumeSpike =
-      current.avgVolume > 0 ? current.volume / current.avgVolume : 1;
-
-    const recentSwings = this.calculateRecentSwings(data, i, 10);
+    const atrChange = prev.atr ? (c.atr - prev.atr) / prev.atr : 0;
+    const priceRange = (c.high - c.low) / (c.close || 1);
+    const rsiVelocity = prev.rsi ? (c.rsi - prev.rsi) / prev.rsi : 0;
+    const volumeSpike = c.avgVolume ? c.volume / c.avgVolume : 1;
+    const recentSwings = this.calculateRecentSwings(data, index, 10);
+    const trendStrength = c.adx || 0;
 
     return [
-      current.atr || 0, // ATR level
-      atrChange, // ATR change
-      priceRange, // Price range %
-      rsiVelocity, // RSI velocity
-      volumeSpike, // Volume spike ratio
-      recentSwings, // Swing count
-      current.adx || 0, // ADX / trend strength
+      c.atr,
+      atrChange,
+      priceRange,
+      rsiVelocity,
+      volumeSpike,
+      recentSwings,
+      trendStrength
     ];
   }
 
-  // ✅ Calculate next 5-day average ATR (target)
-  calculateFutureVolatility(data, i) {
-    const future = data.slice(i + 1, i + 6);
-    if (future.length < 5) return null;
-    return (
-      future.reduce((sum, c) => sum + (c.atr || 0), 0) / future.length
-    );
-  }
-
-  // ✅ Count significant swings (last N candles)
-  calculateRecentSwings(data, i, lookback = 10) {
-    const slice = data.slice(Math.max(0, i - lookback), i);
+  calculateRecentSwings(data, index, lookback) {
+    if (index < lookback) return 0;
     let swings = 0;
-    for (let j = 1; j < slice.length; j++) {
-      const change = (slice[j].close - slice[j - 1].close) / slice[j - 1].close;
-      if (Math.abs(change) > 0.003) swings++;
+    for (let i = index - lookback; i < index; i++) {
+      const up = data[i].close > data[i - 1]?.close;
+      const down = data[i].close < data[i - 1]?.close;
+      if (up || down) swings++;
     }
     return swings;
   }
 
-  // ✅ Train model
-  async trainModel(data) {
-    const features = [];
-    const targets = [];
-
-    for (let i = 20; i < data.length - 5; i++) {
-      const feat = this.prepareFeatures(data, i);
-      const target = this.calculateFutureVolatility(data, i);
-      if (target !== null && feat.every((f) => !isNaN(f))) {
-        features.push(feat);
-        targets.push(target);
-      }
-    }
-
-    if (features.length < 200) {
-      throw new Error(
-        `Not enough samples for training. Got ${features.length}, need 200+`
-      );
-    }
-
-    // Train/test split
-    const split = Math.floor(features.length * 0.8);
-    const X_train = features.slice(0, split);
-    const y_train = targets.slice(0, split);
-    const X_test = features.slice(split);
-    const y_test = targets.slice(split);
-
-    console.log(`📊 Training samples: ${X_train.length}, Test: ${X_test.length}`);
-
-    // Train XGBoost regressor
-    this.model = new xgboost.XGBRegressor({
-      maxDepth: 6,
-      nEstimators: 200,
-      learningRate: 0.1,
-    });
-    await this.model.fit(X_train, y_train);
-
-    // Evaluate
-    const preds = await this.model.predict(X_test);
-    const metrics = this.evaluateModel(y_test, preds);
-
-    console.log("✅ Model training complete!");
-    console.log(
-      `   MAE: ${metrics.mae.toFixed(6)}, R²: ${metrics.r2.toFixed(3)}`
-    );
-
-    this.trainingMetrics = metrics;
-    return metrics;
+  calculateFutureVolatility(data, index, horizon = 5) {
+    if (index + horizon >= data.length) return null;
+    const future = data.slice(index + 1, index + 1 + horizon);
+    const avgATR = future.reduce((sum, d) => sum + (d.atr || 0), 0) / future.length;
+    return avgATR;
   }
 
-  // ✅ Evaluate with MAE and R²
-  evaluateModel(y_true, y_pred) {
-    const n = y_true.length;
-    const mae =
-      y_true.reduce((sum, y, i) => sum + Math.abs(y - y_pred[i]), 0) / n;
-
-    const meanY = y_true.reduce((a, b) => a + b, 0) / n;
-    const ssTot = y_true.reduce((sum, y) => sum + (y - meanY) ** 2, 0);
-    const ssRes = y_true.reduce(
-      (sum, y, i) => sum + (y - y_pred[i]) ** 2,
-      0
-    );
-    const r2 = 1 - ssRes / ssTot;
-
-    return { mae, r2 };
-  }
-
-  // ✅ Predict on latest data point
-  async predict(currentData) {
-    if (!this.model) throw new Error("Model not trained/loaded");
-
-    const features = Array.isArray(currentData)
-      ? currentData
-      : this.prepareFeatures(currentData, currentData.length - 1);
-
-    const predictedVolatility = (await this.model.predict([features]))[0];
-    const currentVolatility =
-      currentData.atr || features[0] || predictedVolatility;
-
-    const percentChange =
-      ((predictedVolatility - currentVolatility) / currentVolatility) * 100;
-
-    return {
-      predictedVolatility,
-      volatilityLevel: this.categorizeVolatility(predictedVolatility),
-      riskAdjustment: this.calculateRiskAdjustment(predictedVolatility),
-      confidence: Math.max(0.5, Math.min(0.99, 1 - this.trainingMetrics.mae)),
-      currentVolatility,
-      percentChange,
-      recommendation: this.getRecommendation(predictedVolatility),
-    };
-  }
-
-  // ✅ Categorize volatility
-  categorizeVolatility(val) {
-    if (val < 0.005) return "LOW";
-    if (val < 0.01) return "MEDIUM";
+  categorizeVolatility(vol) {
+    if (!vol || vol <= 0) return "LOW";
+    if (vol < 0.005) return "LOW";
+    if (vol < 0.01) return "MEDIUM";
     return "HIGH";
   }
 
-  // ✅ Risk adjustment multiplier
-  calculateRiskAdjustment(val) {
-    if (val < 0.005) return 2.0;
-    if (val < 0.01) return 1.2;
-    return 0.5;
+  calculateRiskAdjustment(vol) {
+    if (vol < 0.005) return 0.5;
+    if (vol < 0.01) return 1.0;
+    return 1.5;
   }
 
-  // ✅ Recommendation system
-  getRecommendation(val) {
-    const level = this.categorizeVolatility(val);
-    if (level === "LOW") return "INCREASE_POSITION";
-    if (level === "MEDIUM") return "HOLD_POSITION";
-    return "REDUCE_POSITION";
+  // ============= TRAINING =============
+  async trainModel(historicalData) {
+    const X = [];
+    const y = [];
+
+    for (let i = 20; i < historicalData.length - 5; i++) {
+      const features = this.prepareFeatures(historicalData, i);
+      const target = this.calculateFutureVolatility(historicalData, i);
+      if (!target) continue;
+
+      X.push(features);
+      y.push(target);
+    }
+
+    if (X.length === 0) throw new Error("No valid training samples!");
+
+    // Train/test split
+    const split = Math.floor(X.length * 0.8);
+    const trainX = X.slice(0, split);
+    const trainY = y.slice(0, split);
+    const testX = X.slice(split);
+    const testY = y.slice(split);
+
+    console.log(`Training samples: ${trainX.length}, Test samples: ${testX.length}`);
+
+    this.model = new XGBoost.XGBoostRegressor({
+      maxDepth: 6,
+      nEstimators: 200,
+      learningRate: 0.1
+    });
+
+    await this.model.fit(trainX, trainY);
+
+    // Evaluate
+    const preds = await this.model.predict(testX);
+    const metrics = this.evaluate(testY, preds);
+
+    this.trainingMetrics = metrics;
+    console.log("📊 Volatility Model Evaluation:", metrics);
+
+    return metrics;
   }
 
-  // ✅ Save model
+  evaluate(yTrue, yPred) {
+    const n = yTrue.length;
+    const mae = yTrue.reduce((sum, val, i) => sum + Math.abs(val - yPred[i]), 0) / n;
+    const mean = yTrue.reduce((a, b) => a + b, 0) / n;
+    const ssRes = yTrue.reduce((sum, val, i) => sum + Math.pow(val - yPred[i], 2), 0);
+    const ssTot = yTrue.reduce((sum, val) => sum + Math.pow(val - mean, 2), 0);
+    const r2 = 1 - ssRes / ssTot;
+
+    // Classification accuracy check
+    let correct = 0;
+    for (let i = 0; i < n; i++) {
+      if (this.categorizeVolatility(yTrue[i]) === this.categorizeVolatility(yPred[i])) {
+        correct++;
+      }
+    }
+    const classAcc = correct / n;
+
+    return { mae, r2, classAcc };
+  }
+
+  // ============= PREDICTION =============
+  async predict(currentData) {
+    if (!this.model) throw new Error("Model not trained");
+
+    const features = this.prepareFeatures(currentData, currentData.length - 1);
+    const predVol = (await this.model.predict([features]))[0];
+
+    const level = this.categorizeVolatility(predVol);
+    const riskAdj = this.calculateRiskAdjustment(predVol);
+
+    return {
+      predictedVolatility: predVol,
+      volatilityLevel: level,
+      riskAdjustment: riskAdj,
+      confidence: this.trainingMetrics?.r2 || 0.7,
+      currentVolatility: currentData[currentData.length - 1].atr,
+      percentChange: ((predVol - currentData[currentData.length - 1].atr) /
+        (currentData[currentData.length - 1].atr || 1)) * 100,
+      recommendation: riskAdj > 1.2 ? "REDUCE_POSITION" : "NORMAL"
+    };
+  }
+
+  // ============= SAVE / LOAD =============
   async saveModel(filepath = "./saved-models/volatility-model.json") {
     if (!this.model) throw new Error("No model to save");
-    const json = await this.model.toJSON();
-    const metadata = {
-      trainedAt: new Date().toISOString(),
+    const modelData = await this.model.toJSON();
+    const payload = {
+      model: modelData,
       trainingMetrics: this.trainingMetrics,
+      metadata: { trainedAt: new Date().toISOString() }
     };
-    await fs.promises.writeFile(
-      filepath,
-      JSON.stringify({ model: json, metadata })
-    );
-    console.log(`💾 Model saved to ${filepath}`);
+    await fs.promises.writeFile(filepath, JSON.stringify(payload));
+    console.log(`Model saved → ${filepath}`);
   }
 
-  // ✅ Load model
   async loadModel(filepath = "./saved-models/volatility-model.json") {
-    const raw = JSON.parse(await fs.promises.readFile(filepath, "utf8"));
-    this.model = new xgboost.XGBRegressor();
-    await this.model.loadModelFromJSON(raw.model);
-    this.trainingMetrics = raw.metadata.trainingMetrics;
-    console.log(
-      `📂 Model loaded from ${filepath}, trained at ${raw.metadata.trainedAt}`
-    );
+    const payload = JSON.parse(await fs.promises.readFile(filepath, "utf8"));
+    this.model = new XGBoost.XGBoostRegressor();
+    await this.model.fromJSON(payload.model);
+    this.trainingMetrics = payload.trainingMetrics;
+    console.log(`Model loaded → ${filepath} (Trained at ${payload.metadata.trainedAt})`);
   }
 }
 
