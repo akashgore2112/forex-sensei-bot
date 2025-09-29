@@ -17,13 +17,13 @@ class SwingSignalClassifier {
     this.reverseLabel = ["BUY", "SELL", "HOLD"];
   }
 
-  // ✅ Safe number parser
+  // ✅ NaN-safe conversion
   safeNumber(v) {
     if (v === null || v === undefined || isNaN(v)) return 0;
     return Number(v);
   }
 
-  // ✅ Prepare single feature vector
+  // ✅ Convert market data → features
   prepareFeatures(marketData) {
     return [
       this.safeNumber(this.calculateEMATrend(marketData)),
@@ -36,7 +36,7 @@ class SwingSignalClassifier {
     ];
   }
 
-  // ✅ Train model
+  // ✅ Train model with balancing
   async trainModel(historicalData) {
     const trainingData = [];
     const labels = [];
@@ -45,6 +45,7 @@ class SwingSignalClassifier {
       const currentData = historicalData[i];
       const features = this.prepareFeatures(currentData);
 
+      // Feature sanity check
       if (features.length !== 7 || features.some(v => v === undefined || Number.isNaN(v))) {
         continue;
       }
@@ -66,25 +67,45 @@ class SwingSignalClassifier {
       throw new Error("❌ No valid training data for Random Forest.");
     }
 
+    // 📊 Show training stats
     console.log(
       `📊 Training Random Forest → Samples: ${trainingData.length}, Features per sample: ${trainingData[0].length}`
     );
     console.log(
-      `📊 Label Distribution: BUY=${labels.filter(l => l === 0).length}, SELL=${labels.filter(l => l === 1).length}, HOLD=${labels.filter(l => l === 2).length}`
+      `📊 Label Distribution (raw): BUY=${labels.filter(l => l === 0).length}, SELL=${labels.filter(l => l === 1).length}, HOLD=${labels.filter(l => l === 2).length}`
     );
 
+    // ✅ Compute class weights (inverse frequency)
+    const total = labels.length;
+    const classCounts = {
+      0: labels.filter(l => l === 0).length, // BUY
+      1: labels.filter(l => l === 1).length, // SELL
+      2: labels.filter(l => l === 2).length, // HOLD
+    };
+
+    const classWeights = {
+      0: total / (3 * (classCounts[0] || 1)),
+      1: total / (3 * (classCounts[1] || 1)),
+      2: total / (3 * (classCounts[2] || 1)),
+    };
+
+    console.log("⚖️ Class Weights Applied:", classWeights);
+
+    // ✅ Train Random Forest
     this.model = new RandomForestClassifier({
       nEstimators: 100,
       maxFeatures: 0.8,
       replacement: false,
       seed: 42,
+      useSampleBagging: true,
     });
 
-    this.model.train(trainingData, labels);
+    this.model.train(trainingData, labels, { weights: labels.map(l => classWeights[l]) });
+
     console.log("✅ Random Forest Training Completed!");
   }
 
-  // ✅ Predict with manual probability calculation
+  // ✅ Predict BUY/SELL/HOLD
   predict(currentData) {
     if (!this.model) throw new Error("❌ Model not trained.");
     const features = this.prepareFeatures(currentData);
@@ -93,36 +114,27 @@ class SwingSignalClassifier {
       throw new Error("❌ Invalid feature length for prediction.");
     }
 
-    // Raw votes from all trees
-    const votes = this.model.estimators.map(tree => tree.predict([features])[0]);
+    const predictionIdx = this.model.predict([features])[0];
+    let probabilities = { BUY: 0, SELL: 0, HOLD: 0 };
 
-    // Count votes for each label
-    const counts = { 0: 0, 1: 0, 2: 0 };
-    votes.forEach(v => counts[v]++);
-
-    // Normalize counts → probabilities
-    const total = votes.length;
-    const probabilities = [
-      counts[0] / total, // BUY
-      counts[1] / total, // SELL
-      counts[2] / total  // HOLD
-    ];
-
-    // Pick final signal
-    const predictionIdx = probabilities.indexOf(Math.max(...probabilities));
+    // `predictProba` check (if available)
+    if (typeof this.model.predictProba === "function") {
+      const proba = this.model.predictProba([features])[0];
+      probabilities = {
+        BUY: proba[0],
+        SELL: proba[1],
+        HOLD: proba[2],
+      };
+    }
 
     return {
       signal: this.reverseLabel[predictionIdx],
-      confidence: Math.max(...probabilities),
-      probabilities: {
-        BUY: probabilities[0],
-        SELL: probabilities[1],
-        HOLD: probabilities[2],
-      },
+      confidence: probabilities[this.reverseLabel[predictionIdx]] || 1.0,
+      probabilities,
     };
   }
 
-  // === Placeholder helpers ===
+  // === Indicator helpers ===
   calculateEMATrend(data) {
     return data.ema20 > data.ema50 ? 1 : -1;
   }
