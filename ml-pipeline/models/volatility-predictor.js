@@ -1,268 +1,280 @@
 // ============================================================================
-// 📊 XGBoost Volatility Predictor - FIXED VERSION
+// 📊 Statistical Volatility Predictor (Industry Standard Methods)
 // Phase 2 - Step 1.3
-// Goal: Predict next 5-day volatility (ATR-based) for risk management
+// Goal: Predict next 5-day volatility using proven statistical methods
 // ============================================================================
 
 const fs = require("fs");
-const xgboost = require("ml-xgboost");
 
 class VolatilityPredictor {
   constructor() {
-    this.booster = null;
-    this.trained = false;
-    this.trainingMetrics = null;
+    this.lookback = 60; // 60 days for calculations
+    this.ewmaAlpha = 0.94; // Standard for daily forex data
   }
 
   // ==========================================================================
-  // 📌 Feature Engineering
+  // 📌 Core Statistical Methods
   // ==========================================================================
-  prepareFeatures(data, i) {
-    const current = data[i];
-    const prev = data[i - 1] || current;
 
-    // ✅ FIXED: Proper validation (check for null/undefined, not falsy)
-    if (
-      current.close == null || current.high == null || current.low == null ||
-      current.atr == null || current.rsi == null || 
-      current.volume == null || current.avgVolume == null || current.adx == null
-    ) {
-      return null;
-    }
-
-    // ✅ FIXED: Additional NaN/Infinity checks
-    const requiredValues = [
-      current.close, current.high, current.low, current.atr, 
-      current.rsi, current.volume, current.avgVolume, current.adx
-    ];
-    
-    if (requiredValues.some(v => !Number.isFinite(v))) {
-      return null;
-    }
-
-    const features = [
-      current.atr,                                                    // Current ATR
-      prev.atr > 0 ? (current.atr - prev.atr) / prev.atr : 0,       // ATR change
-      (current.high - current.low) / current.close,                  // Price range
-      prev.rsi > 0 ? (current.rsi - prev.rsi) / prev.rsi : 0,       // RSI velocity
-      current.avgVolume > 0 ? current.volume / current.avgVolume : 1, // Volume spike
-      this.calculateRecentSwings(data, i, 10),                       // Recent swings
-      current.adx                                                     // Trend strength
-    ];
-
-    // ✅ Ensure all features are valid numbers
-    return features.map(v => Number.isFinite(v) ? v : 0);
-  }
-
-  calculateRecentSwings(data, index, lookback = 10) {
-    let swings = 0;
-    const start = Math.max(1, index - lookback);
-    
-    for (let j = start; j < index; j++) {
-      const prev = data[j - 1];
-      const curr = data[j];
-      
-      if (!prev || !curr || !prev.close || !curr.close) continue;
-      
-      const change = Math.abs(curr.close - prev.close) / prev.close;
-      if (change > 0.005) swings++; // 0.5% move = swing
-    }
-    
-    return swings;
-  }
-
-  calculateFutureVolatility(data, i, horizon = 5) {
-    const end = Math.min(i + 1 + horizon, data.length);
-    const futureSlice = data.slice(i + 1, end);
-    
-    if (futureSlice.length === 0) return null;
-
-    const atrValues = futureSlice
-      .map(c => c.atr)
-      .filter(v => v != null && Number.isFinite(v) && v > 0);
-
-    if (atrValues.length === 0) return null;
-
-    return atrValues.reduce((sum, val) => sum + val, 0) / atrValues.length;
-  }
-
-  // ==========================================================================
-  // 📌 Training
-  // ==========================================================================
-  async trainModel(historicalData) {
-    const features = [];
-    const targets = [];
-
-    console.log(`📊 Preparing training dataset from ${historicalData.length} candles...`);
-
-    // ✅ Need more lookback for features (20) and horizon for target (5)
-    for (let i = 20; i < historicalData.length - 5; i++) {
-      const f = this.prepareFeatures(historicalData, i);
-      const target = this.calculateFutureVolatility(historicalData, i, 5);
-
-      if (f && target && target > 0) {
-        features.push(f);
-        targets.push(target);
+  /**
+   * Calculate returns from price data
+   */
+  calculateReturns(data) {
+    const returns = [];
+    for (let i = 1; i < data.length; i++) {
+      if (data[i].close > 0 && data[i - 1].close > 0) {
+        returns.push((data[i].close - data[i - 1].close) / data[i - 1].close);
       }
     }
-
-    console.log(`✅ Prepared ${features.length} samples for training`);
-
-    if (features.length < 300) {
-      throw new Error(
-        `❌ Not enough valid samples to train volatility model (need 300+, got ${features.length})`
-      );
-    }
-
-    // Train/test split
-    const split = Math.floor(features.length * 0.8);
-    const X_train = features.slice(0, split);
-    const y_train = targets.slice(0, split);
-    const X_test = features.slice(split);
-    const y_test = targets.slice(split);
-
-    console.log(`📊 Train/Test Split: ${X_train.length}/${X_test.length}`);
-    console.log("⚡ Training XGBoost regressor...");
-
-    // ✅ Create DMatrix objects
-    const dtrain = new xgboost.DMatrix(X_train, y_train);
-    const dtest = new xgboost.DMatrix(X_test, y_test);
-
-    // ✅ Train with ml-xgboost
-    const params = {
-      objective: "reg:squarederror",
-      max_depth: 6,
-      eta: 0.1,
-      subsample: 0.8,
-      colsample_bytree: 0.8,
-      silent: 0
-    };
-
-    this.booster = xgboost.train(
-      params,
-      dtrain,
-      100, // num_boost_round
-      [[dtest, "validation"]]
-    );
-
-    // ✅ Evaluate test MAE
-    const predictions = this.booster.predict(dtest);
-    const mae = predictions.reduce((sum, pred, idx) => {
-      return sum + Math.abs(pred - y_test[idx]);
-    }, 0) / predictions.length;
-
-    this.trainingMetrics = {
-      samples: features.length,
-      trainSize: X_train.length,
-      testSize: X_test.length,
-      meanAbsoluteError: mae,
-      avgTargetValue: y_test.reduce((a, b) => a + b, 0) / y_test.length
-    };
-
-    this.trained = true;
-
-    console.log("✅ Training completed!");
-    console.log(`📊 Test Set MAE: ${mae.toFixed(6)}`);
-    console.log(`📊 Avg Target Value: ${this.trainingMetrics.avgTargetValue.toFixed(6)}`);
-
-    return this.trainingMetrics;
+    return returns;
   }
 
-  // ==========================================================================
-  // 📌 Prediction
-  // ==========================================================================
-  predict(currentData) {
-    if (!this.trained || !this.booster) {
-      throw new Error("❌ Model not trained or loaded");
-    }
+  /**
+   * Historical Volatility (Standard Deviation of Returns)
+   */
+  calculateHistoricalVolatility(returns, period = 20) {
+    if (returns.length < period) return 0;
 
-    // ✅ Handle both array and single object input
-    const dataArray = Array.isArray(currentData) ? currentData : [currentData];
-    const lastIndex = dataArray.length - 1;
-
-    const f = this.prepareFeatures(dataArray, lastIndex);
+    const recentReturns = returns.slice(-period);
+    const mean = recentReturns.reduce((sum, r) => sum + r, 0) / period;
+    const variance = recentReturns.reduce((sum, r) => sum + Math.pow(r - mean, 2), 0) / period;
     
-    if (!f) {
-      throw new Error("❌ Invalid input data for prediction");
+    return Math.sqrt(variance) * Math.sqrt(252); // Annualized
+  }
+
+  /**
+   * EWMA Volatility (Exponential Weighted Moving Average)
+   * Industry standard: Recent data weighted more heavily
+   */
+  calculateEWMAVolatility(returns) {
+    if (returns.length === 0) return 0;
+
+    let ewmaVar = Math.pow(returns[0], 2); // Initialize with first squared return
+
+    for (let i = 1; i < returns.length; i++) {
+      ewmaVar = this.ewmaAlpha * ewmaVar + (1 - this.ewmaAlpha) * Math.pow(returns[i], 2);
     }
 
-    // ✅ Predict using ml-xgboost
-    const dtest = new xgboost.DMatrix([f]);
-    const predictions = this.booster.predict(dtest);
-    const predictedVolatility = predictions[0];
+    return Math.sqrt(ewmaVar) * Math.sqrt(252); // Annualized
+  }
 
-    const currentVolatility = dataArray[lastIndex].atr || 0;
-    const percentChange = currentVolatility > 0
-      ? ((predictedVolatility - currentVolatility) / currentVolatility) * 100
-      : 0;
+  /**
+   * ATR Trend Analysis
+   * Determine if volatility is increasing or decreasing
+   */
+  analyzeATRTrend(data, period = 20) {
+    const atrValues = data.slice(-period).map(d => d.atr).filter(v => v > 0);
+    
+    if (atrValues.length < 10) {
+      return { trend: "STABLE", momentum: 0 };
+    }
+
+    // Linear regression on ATR values
+    const n = atrValues.length;
+    const xMean = (n - 1) / 2;
+    const yMean = atrValues.reduce((sum, val) => sum + val, 0) / n;
+
+    let numerator = 0;
+    let denominator = 0;
+
+    for (let i = 0; i < n; i++) {
+      numerator += (i - xMean) * (atrValues[i] - yMean);
+      denominator += Math.pow(i - xMean, 2);
+    }
+
+    const slope = numerator / denominator;
+    const percentChange = (slope / yMean) * 100;
+
+    let trend = "STABLE";
+    if (percentChange > 2) trend = "INCREASING";
+    else if (percentChange < -2) trend = "DECREASING";
 
     return {
-      predictedVolatility: Number(predictedVolatility.toFixed(6)),
-      volatilityLevel: this.categorizeVolatility(predictedVolatility, dataArray[lastIndex]),
-      riskAdjustment: this.calculateRiskAdjustment(predictedVolatility),
-      confidence: Math.max(0, Math.min(1, 1 - Math.abs(percentChange) / 100)),
-      currentVolatility: Number(currentVolatility.toFixed(6)),
-      percentChange: Number(percentChange.toFixed(2)),
-      recommendation: predictedVolatility > currentVolatility * 1.2
-        ? "REDUCE_POSITION"
-        : "NORMAL_POSITION"
+      trend,
+      momentum: percentChange,
+      recentAvg: yMean
     };
   }
 
-  categorizeVolatility(predictedVolatility, lastCandle) {
-    const close = lastCandle.close || 1;
-    const ratio = predictedVolatility / close;
+  /**
+   * Market Regime Classification
+   */
+  classifyMarketRegime(currentVol, historicalVols) {
+    if (historicalVols.length < 20) return "UNKNOWN";
+
+    // Calculate percentile of current volatility
+    const sorted = [...historicalVols].sort((a, b) => a - b);
+    const position = sorted.filter(v => v <= currentVol).length;
+    const percentile = (position / sorted.length) * 100;
+
+    if (percentile < 30) return "CALM";
+    if (percentile < 70) return "NORMAL";
+    return "VOLATILE";
+  }
+
+  // ==========================================================================
+  // 📌 Main Prediction Method
+  // ==========================================================================
+
+  /**
+   * Predict future volatility using statistical ensemble
+   * @param {Array} data - Historical candle data with ATR
+   * @returns {Object} Volatility forecast
+   */
+  predict(data) {
+    if (!Array.isArray(data) || data.length < 60) {
+      throw new Error(`Need at least 60 candles for prediction, got ${data?.length || 0}`);
+    }
+
+    // Use last 60 days
+    const recentData = data.slice(-this.lookback);
+    
+    // Validate data has required fields
+    const validData = recentData.filter(d => 
+      d.close > 0 && d.high > 0 && d.low > 0 && d.atr > 0
+    );
+
+    if (validData.length < 40) {
+      throw new Error("Insufficient valid data for prediction");
+    }
+
+    // 1. Calculate returns-based volatility
+    const returns = this.calculateReturns(validData);
+    const historicalVol = this.calculateHistoricalVolatility(returns, 20);
+    const ewmaVol = this.calculateEWMAVolatility(returns);
+
+    // 2. ATR-based analysis
+    const currentATR = validData[validData.length - 1].atr;
+    const atrTrend = this.analyzeATRTrend(validData, 20);
+
+    // 3. Calculate ATR percentile (historical context)
+    const historicalATRs = validData.map(d => d.atr);
+    const atrPercentile = this.calculatePercentile(currentATR, historicalATRs);
+
+    // 4. Forecast next 5-day ATR using exponential smoothing
+    let predictedATR = currentATR;
+    
+    // Apply trend adjustment
+    if (atrTrend.trend === "INCREASING") {
+      predictedATR = currentATR * 1.05; // 5% increase expected
+    } else if (atrTrend.trend === "DECREASING") {
+      predictedATR = currentATR * 0.95; // 5% decrease expected
+    }
+
+    // Apply mean reversion (volatility tends to revert to mean)
+    const avgATR = atrTrend.recentAvg;
+    predictedATR = 0.7 * predictedATR + 0.3 * avgATR; // Blend with mean
+
+    // 5. Calculate confidence based on trend consistency
+    const confidence = this.calculateConfidence(atrTrend, atrPercentile);
+
+    // 6. Determine market regime
+    const regime = this.classifyMarketRegime(currentATR, historicalATRs);
+
+    // 7. Calculate metrics
+    const currentClose = validData[validData.length - 1].close;
+    const percentChange = ((predictedATR - currentATR) / currentATR) * 100;
+    const volatilityLevel = this.categorizeVolatility(predictedATR, currentClose);
+    const riskAdjustment = this.calculateRiskAdjustment(predictedATR, currentClose);
+
+    return {
+      predictedVolatility: Number(predictedATR.toFixed(6)),
+      currentVolatility: Number(currentATR.toFixed(6)),
+      volatilityLevel,
+      percentChange: Number(percentChange.toFixed(2)),
+      confidence: Number(confidence.toFixed(2)),
+      riskAdjustment: Number(riskAdjustment.toFixed(2)),
+      recommendation: this.getRecommendation(predictedATR, currentATR, regime),
+      details: {
+        trend: atrTrend.trend,
+        momentum: Number(atrTrend.momentum.toFixed(2)),
+        regime,
+        atrPercentile: Number(atrPercentile.toFixed(1)),
+        historicalVol: Number(historicalVol.toFixed(4)),
+        ewmaVol: Number(ewmaVol.toFixed(4))
+      }
+    };
+  }
+
+  // ==========================================================================
+  // 📌 Helper Methods
+  // ==========================================================================
+
+  calculatePercentile(value, array) {
+    const sorted = [...array].sort((a, b) => a - b);
+    const position = sorted.filter(v => v <= value).length;
+    return (position / sorted.length) * 100;
+  }
+
+  calculateConfidence(atrTrend, percentile) {
+    let confidence = 0.7; // Base confidence
+
+    // Higher confidence if trend is clear
+    if (Math.abs(atrTrend.momentum) > 5) confidence += 0.1;
+    if (Math.abs(atrTrend.momentum) > 10) confidence += 0.1;
+
+    // Lower confidence in extreme percentiles (mean reversion likely)
+    if (percentile > 90 || percentile < 10) confidence -= 0.15;
+
+    return Math.max(0.3, Math.min(0.95, confidence));
+  }
+
+  categorizeVolatility(predictedATR, currentClose) {
+    const ratio = predictedATR / currentClose;
 
     if (ratio < 0.005) return "LOW";      // < 0.5%
     if (ratio < 0.01) return "MEDIUM";    // 0.5% - 1.0%
     return "HIGH";                         // > 1.0%
   }
 
-  calculateRiskAdjustment(volatility) {
-    if (volatility <= 0) return 1.0;
-    if (volatility < 0.005) return 2.0;   // Low volatility → increase position
-    if (volatility < 0.01) return 1.2;    // Medium → slightly increase
-    if (volatility < 0.02) return 0.8;    // High → reduce
-    return 0.5;                            // Very high → cut position in half
+  calculateRiskAdjustment(predictedATR, currentClose) {
+    const ratio = predictedATR / currentClose;
+
+    if (ratio < 0.003) return 2.0;   // Very low volatility → increase position
+    if (ratio < 0.006) return 1.5;   // Low volatility → increase moderately
+    if (ratio < 0.01) return 1.0;    // Normal volatility → standard position
+    if (ratio < 0.015) return 0.7;   // High volatility → reduce position
+    return 0.5;                       // Very high volatility → reduce significantly
+  }
+
+  getRecommendation(predictedATR, currentATR, regime) {
+    const increase = (predictedATR / currentATR) - 1;
+
+    if (regime === "VOLATILE" || increase > 0.2) {
+      return "REDUCE_POSITION";
+    } else if (regime === "CALM" && increase < -0.1) {
+      return "INCREASE_POSITION";
+    }
+    return "NORMAL_POSITION";
   }
 
   // ==========================================================================
-  // 📌 Save / Load
+  // 📌 No Training/Saving Needed (Statistical Model)
   // ==========================================================================
-  async saveModel(filepath = "./saved-models/volatility-model.json") {
-    if (!this.booster) {
-      throw new Error("❌ No model to save");
-    }
 
-    const modelData = {
-      boosterJSON: this.booster.save(),
-      trainedAt: new Date().toISOString(),
-      trainingMetrics: this.trainingMetrics
+  /**
+   * Statistical models don't need training
+   * These methods are here for API compatibility
+   */
+  async trainModel(historicalData) {
+    console.log("Statistical model doesn't require training.");
+    console.log("Volatility is calculated in real-time from data.");
+    return {
+      message: "No training needed for statistical model",
+      ready: true
     };
-
-    await fs.promises.mkdir("./saved-models", { recursive: true });
-    await fs.promises.writeFile(filepath, JSON.stringify(modelData, null, 2));
-    
-    console.log(`💾 Volatility model saved to ${filepath}`);
   }
 
-  async loadModel(filepath = "./saved-models/volatility-model.json") {
-    if (!fs.existsSync(filepath)) {
-      throw new Error(`❌ Saved model not found at ${filepath}`);
-    }
+  async saveModel(filepath) {
+    console.log("Statistical model has no weights to save.");
+    console.log("Configuration can be adjusted in constructor.");
+    return true;
+  }
 
-    const raw = await fs.promises.readFile(filepath, "utf8");
-    const modelData = JSON.parse(raw);
-
-    this.booster = xgboost.Booster.load(modelData.boosterJSON);
-    this.trainingMetrics = modelData.trainingMetrics || null;
-    this.trained = true;
-
-    console.log(`📂 Volatility model loaded from ${filepath}`);
-    if (this.trainingMetrics) {
-      console.log(`   Trained at: ${modelData.trainedAt}`);
-      console.log(`   Test MAE: ${this.trainingMetrics.meanAbsoluteError.toFixed(6)}`);
-    }
+  async loadModel(filepath) {
+    console.log("Statistical model doesn't need loading.");
+    console.log("Ready to predict immediately.");
+    return true;
   }
 }
 
