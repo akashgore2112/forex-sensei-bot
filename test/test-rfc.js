@@ -258,53 +258,62 @@ async function runRFCTest() {
     processedData = await processCandles("EUR/USD");
   }
 
-  // ═══════════════════════════════════════════════════════════════
-  // 🔹 STEP 3: Make Prediction on Latest Candle
-  // ═══════════════════════════════════════════════════════════════
-  console.log("═══════════════════════════════════════");
-  console.log("        PREDICTION ON LATEST DATA");
-  console.log("═══════════════════════════════════════\n");
+// ═══════════════════════════════════════════════════════════════
+// 🔹 STEP 3: Make Prediction on Latest Candle
+// ═══════════════════════════════════════════════════════════════
+console.log("═══════════════════════════════════════");
+console.log("        PREDICTION ON LATEST DATA");
+console.log("═══════════════════════════════════════\n");
 
-  if (!processedData || processedData.processed.length === 0) {
-    throw new Error("❌ No processed data available for prediction");
-  }
-
-  const latestData = processedData.processed[processedData.processed.length - 1];
-  
-  console.log("🔮 Making classification on latest candle...");
-  console.log(`   Date: ${processedData.candles[processedData.candles.length - 1].date}`);
-  console.log(`   Close: ${latestData.close}\n`);
-
-  try {
-    const prediction = classifier.predict(latestData);
-
-    console.log("📌 CLASSIFICATION RESULT:");
-    console.log("──────────────────────────────────────");
-    console.log(`   Signal: ${prediction.signal}`);
-    console.log(`   Confidence: ${(prediction.confidence * 100).toFixed(2)}%`);
-    console.log("\n   Probabilities:");
-    console.log(`   ├─ BUY:  ${(prediction.probabilities.BUY * 100).toFixed(2)}%`);
-    console.log(`   ├─ SELL: ${(prediction.probabilities.SELL * 100).toFixed(2)}%`);
-    console.log(`   └─ HOLD: ${(prediction.probabilities.HOLD * 100).toFixed(2)}%`);
-    console.log("──────────────────────────────────────\n");
-
-    // Additional context
-    console.log("📊 Current Market Context:");
-    console.log(`   EMA20: ${latestData.ema20.toFixed(5)}, EMA50: ${latestData.ema50.toFixed(5)}`);
-    console.log(`   RSI: ${latestData.rsi.toFixed(2)}`);
-    console.log(`   MACD: ${latestData.macd.macd.toFixed(5)}, Signal: ${latestData.macd.signal.toFixed(5)}`);
-    console.log(`   ATR: ${latestData.atr.toFixed(5)}\n`);
-
-  } catch (err) {
-    console.error("❌ Prediction failed:", err.message);
-    console.error(err.stack);
-  }
-
-  console.log("═══════════════════════════════════════");
-  console.log("🎯 Test Completed Successfully!");
-  console.log("═══════════════════════════════════════");
+if (!processedData || processedData.processed.length === 0) {
+  throw new Error("❌ No processed data available for prediction");
 }
 
+const latestData = processedData.processed[processedData.processed.length - 1];
+
+// Convert to feature array
+const featureArray = [
+  latestData.close,
+  latestData.ema20,
+  latestData.ema50,
+  latestData.rsi,
+  latestData.macd?.macd,
+  latestData.macd?.signal,
+  latestData.atr,
+  latestData.volume,
+  latestData.avgVolume,
+  latestData.prevClose,
+];
+
+console.log("🔮 Making classification on latest candle...");
+console.log(`   Date: ${processedData.candles[processedData.candles.length - 1].date}`);
+console.log(`   Close: ${latestData.close}\n`);
+
+try {
+  const prediction = classifier.predict(featureArray);
+
+  console.log("📌 CLASSIFICATION RESULT:");
+  console.log("──────────────────────────────────────");
+  console.log(`   Signal: ${prediction.signal}`);
+  console.log(`   Confidence: ${(prediction.confidence * 100).toFixed(2)}%`);
+  console.log("\n   Probabilities:");
+  console.log(`   ├─ BUY:  ${(prediction.probabilities.BUY * 100).toFixed(2)}%`);
+  console.log(`   ├─ SELL: ${(prediction.probabilities.SELL * 100).toFixed(2)}%`);
+  console.log(`   └─ HOLD: ${(prediction.probabilities.HOLD * 100).toFixed(2)}%`);
+  console.log("──────────────────────────────────────\n");
+
+  // Additional context
+  console.log("📊 Current Market Context:");
+  console.log(`   EMA20: ${latestData.ema20.toFixed(5)}, EMA50: ${latestData.ema50.toFixed(5)}`);
+  console.log(`   RSI: ${latestData.rsi.toFixed(2)}`);
+  console.log(`   MACD: ${latestData.macd.macd.toFixed(5)}, Signal: ${latestData.macd.signal.toFixed(5)}`);
+  console.log(`   ATR: ${latestData.atr.toFixed(5)}\n`);
+
+} catch (err) {
+  console.error("❌ Prediction failed:", err.message);
+  console.error(err.stack);
+}
+  
 // ═══════════════════════════════════════════════════════════════
 // MAIN EXECUTION
 // ═══════════════════════════════════════════════════════════════
