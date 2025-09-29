@@ -13,6 +13,8 @@ class SwingSignalClassifier {
       "momentum_strength",
       "volume_trend",
     ];
+    this.labelMap = { BUY: 0, SELL: 1, HOLD: 2 };
+    this.reverseLabel = ["BUY", "SELL", "HOLD"];
   }
 
   safeNumber(v) {
@@ -21,55 +23,41 @@ class SwingSignalClassifier {
   }
 
   prepareFeatures(marketData) {
-    return {
-      ema_trend: this.safeNumber(this.calculateEMATrend(marketData)),
-      rsi_level: this.safeNumber(this.normalizeRSI(marketData.rsi)),
-      macd_signal: this.safeNumber(this.getMACDSignal(marketData.macd)),
-      atr_volatility: this.safeNumber(this.normalizeATR(marketData.atr)),
-      price_position: this.safeNumber(this.getPricePosition(marketData)),
-      momentum_strength: this.safeNumber(this.calculateMomentum(marketData)),
-      volume_trend: this.safeNumber(this.getVolumeTrend(marketData)),
-    };
+    return [
+      this.safeNumber(this.calculateEMATrend(marketData)),
+      this.safeNumber(this.normalizeRSI(marketData.rsi)),
+      this.safeNumber(this.getMACDSignal(marketData.macd)),
+      this.safeNumber(this.normalizeATR(marketData.atr)),
+      this.safeNumber(this.getPricePosition(marketData)),
+      this.safeNumber(this.calculateMomentum(marketData)),
+      this.safeNumber(this.getVolumeTrend(marketData)),
+    ];
   }
 
   async trainModel(historicalData) {
     const trainingData = [];
     const labels = [];
-    let skipped = 0;
 
     for (let i = 100; i < historicalData.length - 10; i++) {
       const currentData = historicalData[i];
       const features = this.prepareFeatures(currentData);
 
-      const featureArray = Object.values(features);
-      if (featureArray.length !== this.features.length) {
-        console.warn(`⚠️ Skipped sample index ${i}: feature length mismatch`);
-        skipped++;
+      // Sanity check (length must be 7)
+      if (features.length !== 7 || features.some(v => v === undefined || Number.isNaN(v))) {
         continue;
       }
 
       const futurePrice = historicalData[i + 5]?.close;
       const currentPrice = currentData.close;
-      if (!futurePrice || !currentPrice) {
-        skipped++;
-        continue;
-      }
+      if (!futurePrice || !currentPrice) continue;
 
       const priceChange = (futurePrice - currentPrice) / currentPrice;
-
-      let label;
+      let label = "HOLD";
       if (priceChange > 0.01) label = "BUY";
       else if (priceChange < -0.01) label = "SELL";
-      else label = "HOLD";
 
-      if (!label) {
-        console.warn(`⚠️ Skipped sample index ${i}: invalid label`);
-        skipped++;
-        continue;
-      }
-
-      trainingData.push(featureArray);
-      labels.push(label);
+      trainingData.push(features);
+      labels.push(this.labelMap[label]);
     }
 
     if (!trainingData.length || !labels.length) {
@@ -77,15 +65,11 @@ class SwingSignalClassifier {
     }
 
     console.log(
-      `📊 Training Random Forest → Samples: ${trainingData.length}, Features: ${this.features.length}, Skipped: ${skipped}`
+      `📊 Training Random Forest → Samples: ${trainingData.length}, Features per sample: ${trainingData[0].length}`
     );
-
-    // ✅ Print label distribution
-    const dist = labels.reduce((acc, l) => {
-      acc[l] = (acc[l] || 0) + 1;
-      return acc;
-    }, {});
-    console.log("📊 Label distribution:", dist);
+    console.log(
+      `📊 Label Distribution: BUY=${labels.filter(l => l === 0).length}, SELL=${labels.filter(l => l === 1).length}, HOLD=${labels.filter(l => l === 2).length}`
+    );
 
     this.model = new RandomForestClassifier({
       nEstimators: 100,
@@ -100,25 +84,27 @@ class SwingSignalClassifier {
 
   predict(currentData) {
     if (!this.model) throw new Error("❌ Model not trained.");
-
     const features = this.prepareFeatures(currentData);
-    const featureArray = [Object.values(features)];
 
-    const prediction = this.model.predict(featureArray);
-    const probabilities = this.model.predictProba(featureArray);
+    if (features.length !== 7) {
+      throw new Error("❌ Invalid feature length for prediction.");
+    }
+
+    const predictionIdx = this.model.predict([features])[0];
+    const probabilities = this.model.predictProba([features])[0];
 
     return {
-      signal: prediction[0],
-      confidence: Math.max(...probabilities[0]),
+      signal: this.reverseLabel[predictionIdx],
+      confidence: Math.max(...probabilities),
       probabilities: {
-        BUY: probabilities[0][0],
-        SELL: probabilities[0][1],
-        HOLD: probabilities[0][2],
+        BUY: probabilities[0],
+        SELL: probabilities[1],
+        HOLD: probabilities[2],
       },
     };
   }
 
-  // 🟢 Placeholder methods
+  // === Placeholder helpers ===
   calculateEMATrend(data) {
     return data.ema20 > data.ema50 ? 1 : -1;
   }
