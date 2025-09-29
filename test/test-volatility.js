@@ -29,29 +29,33 @@ async function processCandles(pair = "EUR/USD") {
   console.log("📈 Calculating indicators on candles...");
   const indicators = await SwingIndicators.calculateAll(candles);
 
-  // 🔄 Merge candles + indicators
-  const processed = candles.map((c, i) => ({
-    close: c.close,
-    high: c.high,
-    low: c.low,
-    volume: c.volume || 0,
-    avgVolume:
+  // 🔄 Merge candles + indicators (strict feature set for ML)
+  const processed = candles.map((c, i) => {
+    const avgVolume =
       i >= 20
         ? candles
             .slice(i - 20, i)
             .reduce((sum, d) => sum + (d.volume || 0), 0) / 20
-        : c.volume || 1,
-    rsi: indicators.rsi14?.[i],
-    atr: indicators.atr?.[i],
-    ema20: indicators.ema20?.[i],
-    ema50: indicators.ema50?.[i],
-    macd: {
-      macd: indicators.macd?.macd?.[i],
-      signal: indicators.macd?.signal?.[i],
-      histogram: indicators.macd?.histogram?.[i],
-    },
-    adx: indicators.adx?.[i],
-  }));
+        : c.volume || 1;
+
+    return {
+      close: c.close,
+      high: c.high,
+      low: c.low,
+      volume: c.volume || 0,
+      avgVolume,
+      rsi: indicators.rsi14?.[i],
+      atr: indicators.atr?.[i],
+      ema20: indicators.ema20?.[i],
+      ema50: indicators.ema50?.[i],
+      macd: {
+        macd: indicators.macd?.macd?.[i],
+        signal: indicators.macd?.signal?.[i],
+        histogram: indicators.macd?.histogram?.[i],
+      },
+      adx: indicators.adx?.[i],
+    };
+  });
 
   // 🧹 Filter invalid samples
   const validProcessed = processed.filter((d) => {
@@ -68,7 +72,9 @@ async function processCandles(pair = "EUR/USD") {
     return values.every((v) => v !== undefined && v !== null && !Number.isNaN(v));
   });
 
-  console.log(`📊 Valid samples after filtering: ${validProcessed.length}/${processed.length}`);
+  console.log(
+    `📊 Valid samples after filtering: ${validProcessed.length}/${processed.length}`
+  );
 
   // Debug first 3
   console.log("\n🔍 Sample processed data (first 3 rows):");
@@ -84,7 +90,10 @@ async function runVolatilityTest() {
   console.log("🚀 Starting Volatility Predictor Test...");
   console.log(`   Mode: ${forceRetrain ? "FORCE RETRAIN" : "LOAD OR TRAIN"}\n`);
 
-  const modelPath = path.join(__dirname, "../saved-models/volatility-model.json");
+  const modelPath = path.join(
+    __dirname,
+    "../saved-models/volatility-model.json"
+  );
   const trainer = new VolatilityTrainer();
   let processedData = null;
   let predictor = null;
@@ -95,7 +104,10 @@ async function runVolatilityTest() {
       predictor = await trainer.loadExistingModel();
       console.log("✅ Pre-trained Volatility model loaded successfully!\n");
     } catch (err) {
-      console.warn("⚠️ Failed to load saved model, will retrain instead:", err.message);
+      console.warn(
+        "⚠️ Failed to load saved model, will retrain instead:",
+        err.message
+      );
       predictor = null;
     }
   } else if (forceRetrain) {
@@ -126,7 +138,7 @@ async function runVolatilityTest() {
     processedData = await processCandles("EUR/USD");
   }
 
-  // STEP 3: Prediction on latest candle
+  // STEP 3: Prediction on latest N candles
   console.log("═══════════════════════════════════════");
   console.log("       PREDICTION ON LATEST DATA");
   console.log("═══════════════════════════════════════\n");
@@ -136,15 +148,24 @@ async function runVolatilityTest() {
   }
 
   try {
+    // ✅ Pass full series to predictor (not just one object)
     const prediction = predictor.predict(processedData);
 
     console.log("\n📌 VOLATILITY FORECAST:");
     console.log("──────────────────────────────────────");
-    console.log(`   Predicted Volatility: ${prediction.predictedVolatility.toFixed(6)}`);
-    console.log(`   Current Volatility:   ${prediction.currentVolatility.toFixed(6)}`);
-    console.log(`   Percent Change:       ${prediction.percentChange.toFixed(2)}%`);
+    console.log(
+      `   Predicted Volatility: ${prediction.predictedVolatility.toFixed(6)}`
+    );
+    console.log(
+      `   Current Volatility:   ${prediction.currentVolatility.toFixed(6)}`
+    );
+    console.log(
+      `   Percent Change:       ${prediction.percentChange.toFixed(2)}%`
+    );
     console.log(`   Volatility Level:     ${prediction.volatilityLevel}`);
-    console.log(`   Risk Adjustment:      ${prediction.riskAdjustment.toFixed(2)}x`);
+    console.log(
+      `   Risk Adjustment:      ${prediction.riskAdjustment.toFixed(2)}x`
+    );
     console.log(`   Confidence:           ${(prediction.confidence * 100).toFixed(1)}%`);
     console.log(`   Recommendation:       ${prediction.recommendation}`);
     console.log("──────────────────────────────────────\n");
