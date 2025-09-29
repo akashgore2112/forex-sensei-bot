@@ -156,21 +156,12 @@ class LSTMPricePredictor {
       epochs: 100,
       batchSize: 32,
       validationSplit: 0.2,
+      verbose: 1, // Show training progress
       callbacks: [
         tf.callbacks.earlyStopping({ 
           monitor: 'val_loss',
           patience: 10
-          // restoreBestWeights not supported in tfjs yet
-        }),
-        {
-          onEpochEnd: (epoch, logs) => {
-            if ((epoch + 1) % 10 === 0) {
-              console.log(
-                `  Epoch ${epoch + 1}: loss=${logs.loss.toFixed(6)}, val_loss=${logs.val_loss.toFixed(6)}`
-              );
-            }
-          }
-        }
+        })
       ],
     });
 
