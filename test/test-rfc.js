@@ -1,5 +1,5 @@
 // test/test-rfc.js
-// 📊 Step 1.2 - Random Forest Classifier Test with MTFA Data + Load-or-Train + Force Retrain Option
+// 📊 Step 1.2 - Random Forest Classifier Test with MTFA Data + Load-or-Train (Real Candle Always)
 
 const SwingSignalClassifier = require("../ml-pipeline/models/random-forest-classifier");
 const MTFA = require("../mtfa");
@@ -122,27 +122,36 @@ async function runRFCTest() {
       console.error("❌ Training failed:", err.message);
       return;
     }
+  } else {
+    // 🔹 Model loaded → still need latest candle for prediction
+    console.log("\n📊 Fetching latest candle for prediction...");
+    const mtfaResult = await MTFA.analyze("EUR/USD");
+    const candles = mtfaResult.dailyCandles;
+    const indicators = await SwingIndicators.calculateAll(candles);
+
+    const processed = candles.map((c, i) => ({
+      close: c.close,
+      ema20: Array.isArray(indicators.ema20) ? indicators.ema20[i] : indicators.ema20,
+      ema50: Array.isArray(indicators.ema50) ? indicators.ema50[i] : indicators.ema50,
+      rsi: Array.isArray(indicators.rsi14) ? indicators.rsi14[i] : indicators.rsi14,
+      macd:
+        indicators.macd && Array.isArray(indicators.macd.MACD)
+          ? { macd: indicators.macd.MACD[i], signal: indicators.macd.signal[i] }
+          : indicators.macd || { macd: 0, signal: 0 },
+      atr: Array.isArray(indicators.atr) ? indicators.atr[i] : indicators.atr,
+      volume: c.volume || 1000,
+      avgVolume: 1000,
+      prevClose: candles[i - 1]?.close || c.close,
+    }));
+
+    latestData = processed[processed.length - 1];
   }
 
   // 6. Predict last candle
   console.log("\n===============================");
   console.log("🔮 [6/6] Making classification on last candle...");
   try {
-    const dataForPrediction =
-      latestData ||
-      {
-        close: 1.09,
-        ema20: 1.1,
-        ema50: 1.08,
-        rsi: 55,
-        macd: { macd: 0.002, signal: 0.001 },
-        atr: 0.009,
-        volume: 1200,
-        avgVolume: 1000,
-        prevClose: 1.085,
-      };
-
-    const prediction = classifier.predict(dataForPrediction);
+    const prediction = classifier.predict(latestData);
 
     console.log("\n📌 Final Classification Result:");
     console.log("──────────────────────────────────────");
