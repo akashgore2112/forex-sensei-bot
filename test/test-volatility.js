@@ -1,23 +1,17 @@
 // ============================================================================
-// 📊 Volatility Predictor Test (Phase 2 - Step 1.3)
-// FINAL SAFE VERSION: Fix for EPIPE → sends JSON + newline
+// 📊 Volatility Predictor Test (Statistical Model - No Training)
+// Phase 2 - Step 1.3
 // ============================================================================
 
 const MTFA = require("../mtfa");
 const SwingIndicators = require("../swing-indicators");
-const VolatilityTrainer = require("../ml-pipeline/training/volatility-trainer");
-const fs = require("fs");
-const path = require("path");
-const { spawn } = require("child_process");
-
-const args = process.argv.slice(2);
-const forceRetrain = args.includes("--force-train");
+const VolatilityPredictor = require("../ml-pipeline/models/volatility-predictor");
 
 // ============================================================================
 // 📌 Helper: Merge candles + indicators
 // ============================================================================
 async function processCandles(pair = "EUR/USD") {
-  console.log(`📊 Fetching MTFA data for ${pair}...`);
+  console.log(`\n📊 Fetching MTFA data for ${pair}...`);
   const mtfaResult = await MTFA.analyze(pair);
 
   if (!mtfaResult || !mtfaResult.dailyCandles?.length) {
@@ -30,147 +24,107 @@ async function processCandles(pair = "EUR/USD") {
   console.log("📈 Calculating indicators on candles...");
   const indicators = await SwingIndicators.calculateAll(candles);
 
-  const processed = candles.map((c, i) => {
-    const safe = (arr) => (Array.isArray(arr) && arr[i] !== undefined ? arr[i] : null);
+  // Merge candles + indicators
+  const processed = candles.map((c, i) => ({
+    close: c.close,
+    high: c.high,
+    low: c.low,
+    volume: c.volume || 0,
+    rsi: indicators.rsi14?.[i] || 50,
+    atr: indicators.atr?.[i] || 0,
+    adx: indicators.adx?.[i] || 20
+  }));
 
-    return {
-      close: c.close ?? null,
-      high: c.high ?? null,
-      low: c.low ?? null,
-      volume: c.volume ?? 0,
-      avgVolume:
-        i >= 20
-          ? candles.slice(i - 20, i).reduce((sum, d) => sum + (d.volume || 0), 0) / 20
-          : c.volume || 1,
-      rsi: safe(indicators.rsi14),
-      atr: safe(indicators.atr),
-      ema20: safe(indicators.ema20),
-      ema50: safe(indicators.ema50),
-      macd: {
-        macd: safe(indicators.macd?.macd),
-        signal: safe(indicators.macd?.signal),
-        histogram: safe(indicators.macd?.histogram),
-      },
-      adx: safe(indicators.adx),
-    };
-  });
+  // Filter invalid samples (ensure ATR exists)
+  const validProcessed = processed.filter(d => 
+    d.close > 0 && d.high > 0 && d.low > 0 && d.atr > 0
+  );
 
-  const validProcessed = processed.filter((d, idx) => {
-    const values = [d.close, d.high, d.low, d.volume, d.avgVolume, d.rsi, d.atr, d.adx];
-    const isValid = values.every((v) => v !== undefined && v !== null && !Number.isNaN(v));
-    if (!isValid) {
-      console.warn(`⚠️ Dropped sample @index=${idx} → Missing fields`);
-    }
-    return isValid;
-  });
-
-  console.log(`📊 Valid samples after filtering: ${validProcessed.length}/${processed.length}`);
-
-  console.log("\n🔍 Sample processed data (first 3 rows):");
-  console.log(JSON.stringify(validProcessed.slice(0, 3), null, 2));
+  console.log(`✅ Valid samples: ${validProcessed.length}/${processed.length}\n`);
 
   return validProcessed;
-}
-
-// ============================================================================
-// 📌 Call Python predictor for latest candle
-// ============================================================================
-async function predictWithPython(latestCandle) {
-  return new Promise((resolve, reject) => {
-    const py = spawn("python3", [
-      path.join(__dirname, "../ml-pipeline/models/volatility_predictor.py"),
-    ]);
-
-    let output = "";
-    let error = "";
-
-    py.stdout.on("data", (data) => {
-      output += data.toString();
-    });
-
-    py.stderr.on("data", (data) => {
-      error += data.toString();
-    });
-
-    py.on("close", (code) => {
-      if (code !== 0) {
-        return reject(new Error(`❌ Python predictor failed: ${error}`));
-      }
-
-      try {
-        const result = JSON.parse(output.trim());
-        resolve(result);
-      } catch (err) {
-        reject(new Error(`❌ Failed to parse Python output: ${output}\n${err.message}`));
-      }
-    });
-
-    // ✅ Fix: Send JSON + newline (for Python's readline)
-    py.stdin.write(JSON.stringify(latestCandle) + "\n");
-    py.stdin.end();
-  });
 }
 
 // ============================================================================
 // 📌 Main test runner
 // ============================================================================
 async function runVolatilityTest() {
-  console.log("🚀 Starting Volatility Predictor Test...");
-  console.log(`   Mode: ${forceRetrain ? "FORCE RETRAIN" : "LOAD OR TRAIN"}\n`);
+  console.log("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
+  console.log("   STATISTICAL VOLATILITY PREDICTOR TEST");
+  console.log("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n");
 
-  const modelPath = path.join(__dirname, "../saved-models/volatility-model.json");
-  const trainer = new VolatilityTrainer();
-  let processedData = null;
+  try {
+    // Step 1: Process candle data
+    const processedData = await processCandles("EUR/USD");
 
-  // STEP 1: Train or Load Model
-  if (!forceRetrain && fs.existsSync(modelPath)) {
-    try {
-      await trainer.loadExistingModel();
-      console.log("✅ Pre-trained Volatility model loaded successfully!\n");
-    } catch (err) {
-      console.warn("⚠️ Failed to load saved model, will retrain instead:", err.message);
-      processedData = await processCandles("EUR/USD");
-      await trainer.trainVolatilityModel(processedData);
-    }
-  } else {
-    processedData = await processCandles("EUR/USD");
-
-    if (processedData.length < 500) {
-      throw new Error(`❌ Not enough valid samples (need 500+, got ${processedData.length})`);
+    if (processedData.length < 60) {
+      throw new Error(`Need at least 60 candles, got ${processedData.length}`);
     }
 
-    console.log("\n⚡ Training new volatility model...");
-    console.log("──────────────────────────────────────\n");
-    await trainer.trainVolatilityModel(processedData);
-    console.log("\n✅ Volatility model training completed!");
+    // Step 2: Create predictor (no training needed!)
+    console.log("⚡ Initializing Statistical Volatility Predictor...");
+    const predictor = new VolatilityPredictor();
+    console.log("✅ Predictor ready (no training required)\n");
+
+    // Step 3: Generate prediction
+    console.log("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
+    console.log("        VOLATILITY FORECAST RESULTS");
+    console.log("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n");
+
+    const prediction = predictor.predict(processedData);
+
+    // Display results
+    console.log("📊 MAIN FORECAST:");
+    console.log("─────────────────────────────────────────");
+    console.log(`   Current Volatility:   ${prediction.currentVolatility}`);
+    console.log(`   Predicted Volatility: ${prediction.predictedVolatility}`);
+    console.log(`   Change:               ${prediction.percentChange > 0 ? '+' : ''}${prediction.percentChange}%`);
+    console.log(`   Volatility Level:     ${prediction.volatilityLevel}`);
+    console.log(`   Confidence:           ${(prediction.confidence * 100).toFixed(1)}%`);
+    console.log(`   Risk Adjustment:      ${prediction.riskAdjustment}x`);
+    console.log(`   Recommendation:       ${prediction.recommendation}`);
+    
+    console.log("\n📈 DETAILED ANALYSIS:");
+    console.log("─────────────────────────────────────────");
+    console.log(`   Trend:                ${prediction.details.trend}`);
+    console.log(`   Momentum:             ${prediction.details.momentum > 0 ? '+' : ''}${prediction.details.momentum}%`);
+    console.log(`   Market Regime:        ${prediction.details.regime}`);
+    console.log(`   ATR Percentile:       ${prediction.details.atrPercentile}%`);
+    console.log(`   Historical Vol:       ${(prediction.details.historicalVol * 100).toFixed(2)}%`);
+    console.log(`   EWMA Vol:             ${(prediction.details.ewmaVol * 100).toFixed(2)}%`);
+    
+    console.log("\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
+    console.log("✅ Volatility Test Completed Successfully!");
+    console.log("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n");
+
+    return {
+      success: true,
+      prediction
+    };
+
+  } catch (err) {
+    console.error("\n❌ ERROR:");
+    console.error(`   ${err.message}`);
+    console.error("\n" + err.stack);
+    return {
+      success: false,
+      error: err.message
+    };
   }
-
-  // STEP 2: Prediction with Python
-  processedData = processedData || (await processCandles("EUR/USD"));
-  const latest = processedData[processedData.length - 1];
-  const prediction = await predictWithPython(latest);
-
-  console.log("\n📌 VOLATILITY FORECAST:");
-  console.log("──────────────────────────────────────");
-  console.log(`   Predicted Volatility: ${prediction.predictedVolatility.toFixed(6)}`);
-  console.log(`   Current Volatility:   ${prediction.currentVolatility.toFixed(6)}`);
-  console.log(`   Percent Change:       ${prediction.percentChange.toFixed(2)}%`);
-  console.log(`   Volatility Level:     ${prediction.volatilityLevel}`);
-  console.log(`   Risk Adjustment:      ${prediction.riskAdjustment.toFixed(2)}x`);
-  console.log(`   Confidence:           ${(prediction.confidence * 100).toFixed(1)}%`);
-  console.log(`   Recommendation:       ${prediction.recommendation}`);
-  console.log("──────────────────────────────────────\n");
-
-  console.log("═══════════════════════════════════════");
-  console.log("🎯 Volatility Test Completed!");
-  console.log("═══════════════════════════════════════");
 }
 
 // ============================================================================
 // MAIN EXECUTION
 // ============================================================================
-runVolatilityTest().catch((err) => {
-  console.error("\n❌❌❌ FATAL ERROR ❌❌❌");
-  console.error(err.message);
-  process.exit(1);
-});
+if (require.main === module) {
+  runVolatilityTest()
+    .then(result => {
+      process.exit(result.success ? 0 : 1);
+    })
+    .catch(err => {
+      console.error("Fatal error:", err);
+      process.exit(1);
+    });
+}
+
+module.exports = runVolatilityTest;
