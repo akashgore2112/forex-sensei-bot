@@ -1,7 +1,6 @@
 const talib = require("talib");
 
 class SwingIndicators {
-  // Returns arrays for each candle (for ML training)
   static async calculateAll(data) {
     if (!data || data.length === 0) return {};
 
@@ -27,35 +26,36 @@ class SwingIndicators {
       });
     };
 
-    const ema20Raw = await runOutReal("EMA", {
+    // Calculate indicators (keeping your original TA-Lib calls)
+    const ema20 = await runOutReal("EMA", {
       startIdx: 0,
       endIdx: closes.length - 1,
       inReal: closes,
       optInTimePeriod: 20
     });
 
-    const ema50Raw = await runOutReal("EMA", {
+    const ema50 = await runOutReal("EMA", {
       startIdx: 0,
       endIdx: closes.length - 1,
       inReal: closes,
       optInTimePeriod: 50
     });
 
-    const ema200Raw = await runOutReal("EMA", {
+    const ema200 = await runOutReal("EMA", {
       startIdx: 0,
       endIdx: closes.length - 1,
       inReal: closes,
       optInTimePeriod: 200
     });
 
-    const rsi14Raw = await runOutReal("RSI", {
+    const rsi14 = await runOutReal("RSI", {
       startIdx: 0,
       endIdx: closes.length - 1,
       inReal: closes,
       optInTimePeriod: 14
     });
 
-    const macdRaw = await runRaw("MACD", {
+    const macd = await runRaw("MACD", {
       startIdx: 0,
       endIdx: closes.length - 1,
       inReal: closes,
@@ -64,7 +64,7 @@ class SwingIndicators {
       optInSignalPeriod: 9
     });
 
-    const adxRaw = await runOutReal("ADX", {
+    const adx = await runOutReal("ADX", {
       startIdx: 0,
       endIdx: closes.length - 1,
       high: highs,
@@ -73,7 +73,7 @@ class SwingIndicators {
       optInTimePeriod: 14
     });
 
-    const atrRaw = await runOutReal("ATR", {
+    const atr = await runOutReal("ATR", {
       startIdx: 0,
       endIdx: closes.length - 1,
       high: highs,
@@ -82,7 +82,7 @@ class SwingIndicators {
       optInTimePeriod: 14
     });
 
-    const bollingerRaw = await runRaw("BBANDS", {
+    const bollinger = await runRaw("BBANDS", {
       startIdx: 0,
       endIdx: closes.length - 1,
       inReal: closes,
@@ -92,63 +92,50 @@ class SwingIndicators {
       optInMAType: 0
     });
 
-    const padArray = (arr, skipDays, totalLength) => {
-      const padded = new Array(totalLength).fill(null);
-      for (let i = 0; i < arr.length; i++) {
-        padded[skipDays + i] = arr[i];
-      }
-      return padded;
-    };
+    const supportResistance = this.calculateSupportResistance(data);
 
+    // CHANGED: Return full arrays instead of last values only
     return {
-      ema20: padArray(ema20Raw, 19, data.length),
-      ema50: padArray(ema50Raw, 49, data.length),
-      ema200: padArray(ema200Raw, 199, data.length),
-      rsi14: padArray(rsi14Raw, 14, data.length),
+      ema20: ema20,
+      ema50: ema50,
+      ema200: ema200,
+      rsi14: rsi14,
       macd: {
-        macd: padArray(macdRaw.outMACD, 33, data.length),
-        signal: padArray(macdRaw.outMACDSignal, 33, data.length),
-        histogram: padArray(macdRaw.outMACDHist, 33, data.length)
+        macd: macd.outMACD,
+        signal: macd.outMACDSignal,
+        histogram: macd.outMACDHist
       },
-      adx: padArray(adxRaw, 27, data.length),
-      atr: padArray(atrRaw, 14, data.length),
+      adx: adx,
+      atr: atr,
       bollinger: {
-        upper: padArray(bollingerRaw.outRealUpperBand, 19, data.length),
-        middle: padArray(bollingerRaw.outRealMiddleBand, 19, data.length),
-        lower: padArray(bollingerRaw.outRealLowerBand, 19, data.length)
+        upper: bollinger.outRealUpperBand,
+        middle: bollinger.outRealMiddleBand,
+        lower: bollinger.outRealLowerBand
       },
-      supportResistance: this.calculateSupportResistance(data)
+      supportResistance
     };
   }
 
-  // Returns single values (latest only) for MTFA
+  // NEW: Returns only latest values for MTFA
   static async calculateCurrent(data) {
     const all = await this.calculateAll(data);
     
-    const getLastValue = (arr) => {
-      if (!arr || arr.length === 0) return null;
-      for (let i = arr.length - 1; i >= 0; i--) {
-        if (arr[i] !== null && arr[i] !== undefined) return arr[i];
-      }
-      return null;
-    };
-
     return {
-      ema20: getLastValue(all.ema20),
-      ema50: getLastValue(all.ema50),
-      ema200: getLastValue(all.ema200),
-      rsi14: getLastValue(all.rsi14),
+      ema20: all.ema20[all.ema20.length - 1],
+      ema50: all.ema50[all.ema50.length - 1],
+      ema200: all.ema200[all.ema200.length - 1],
+      rsi14: all.rsi14[all.rsi14.length - 1],
       macd: {
-        macd: getLastValue(all.macd.macd),
-        signal: getLastValue(all.macd.signal),
-        histogram: getLastValue(all.macd.histogram)
+        macd: all.macd.macd[all.macd.macd.length - 1],
+        signal: all.macd.signal[all.macd.signal.length - 1],
+        histogram: all.macd.histogram[all.macd.histogram.length - 1]
       },
-      adx: getLastValue(all.adx),
-      atr: getLastValue(all.atr),
+      adx: all.adx[all.adx.length - 1],
+      atr: all.atr[all.atr.length - 1],
       bollinger: {
-        upper: getLastValue(all.bollinger.upper),
-        middle: getLastValue(all.bollinger.middle),
-        lower: getLastValue(all.bollinger.lower)
+        upper: all.bollinger.upper[all.bollinger.upper.length - 1],
+        middle: all.bollinger.middle[all.bollinger.middle.length - 1],
+        lower: all.bollinger.lower[all.bollinger.lower.length - 1]
       },
       supportResistance: all.supportResistance
     };
