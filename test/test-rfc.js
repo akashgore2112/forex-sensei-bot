@@ -1,5 +1,5 @@
 // test/test-rfc.js
-// 📊 Step 1.2 - Random Forest Classifier Test with MTFA Data + Debug
+// 📊 Step 1.2 - Random Forest Classifier Test with MTFA Data + Safe Validation
 
 const SwingSignalClassifier = require("../ml-pipeline/models/random-forest-classifier");
 const MTFA = require("../mtfa");
@@ -26,44 +26,54 @@ async function runRFCTest() {
   const indicators = await SwingIndicators.calculateAll(candles);
 
   // 3. Merge candles + indicators
-  const processed = candles.map((c, i) => {
-    const dp = {
-      close: c.close,
-      ema20: Array.isArray(indicators.ema20) ? indicators.ema20[i] : indicators.ema20,
-      ema50: Array.isArray(indicators.ema50) ? indicators.ema50[i] : indicators.ema50,
-      rsi: Array.isArray(indicators.rsi14) ? indicators.rsi14[i] : indicators.rsi14,
-      macd:
-        indicators.macd && Array.isArray(indicators.macd.MACD)
-          ? { macd: indicators.macd.MACD[i], signal: indicators.macd.signal[i] }
-          : indicators.macd || { macd: 0, signal: 0 },
-      atr: Array.isArray(indicators.atr) ? indicators.atr[i] : indicators.atr,
-      volume: c.volume || 1000,
-      avgVolume: 1000,
-      prevClose: candles[i - 1]?.close || c.close,
-    };
-
-    // Debug invalid data
-    if (Object.values(dp).some((v) => v === undefined || Number.isNaN(v))) {
-      console.warn(`⚠️ Debug skipped sample at index ${i}`, dp);
-    }
-
-    return dp;
-  });
+  const processed = candles.map((c, i) => ({
+    close: c.close,
+    ema20: Array.isArray(indicators.ema20) ? indicators.ema20[i] : indicators.ema20,
+    ema50: Array.isArray(indicators.ema50) ? indicators.ema50[i] : indicators.ema50,
+    rsi: Array.isArray(indicators.rsi14) ? indicators.rsi14[i] : indicators.rsi14,
+    macd:
+      indicators.macd && Array.isArray(indicators.macd.MACD)
+        ? { macd: indicators.macd.MACD[i], signal: indicators.macd.signal[i] }
+        : indicators.macd || { macd: 0, signal: 0 },
+    atr: Array.isArray(indicators.atr) ? indicators.atr[i] : indicators.atr,
+    volume: c.volume || 1000,
+    avgVolume: 1000,
+    prevClose: candles[i - 1]?.close || c.close,
+  }));
 
   console.log(`✅ Processed ${processed.length} candles with indicators`);
 
-  // 4. Train classifier
+  // 4. Filter valid samples (avoid NaN / undefined)
+  const validProcessed = processed.filter((d, i) => {
+    const values = [
+      d.close, d.ema20, d.ema50, d.rsi, d.macd?.macd, d.macd?.signal,
+      d.atr, d.volume, d.avgVolume, d.prevClose,
+    ];
+    const isValid = values.every(v => v !== undefined && !Number.isNaN(v));
+    if (!isValid) {
+      console.warn(`⚠️ Skipping invalid sample at index ${i}`, d);
+    }
+    return isValid;
+  });
+
+  console.log(`📊 Valid samples after filtering: ${validProcessed.length}`);
+
+  if (validProcessed.length < 200) {
+    throw new Error("❌ Not enough valid samples for training Random Forest.");
+  }
+
+  // 5. Train classifier
   try {
-    await classifier.trainModel(processed);
+    await classifier.trainModel(validProcessed);
   } catch (err) {
     console.error("❌ Training failed:", err.message);
     return;
   }
 
-  // 5. Predict last candle
+  // 6. Predict last candle
   console.log("\n🔮 Making classification on last candle...");
   try {
-    const latestData = processed[processed.length - 1];
+    const latestData = validProcessed[validProcessed.length - 1];
     const prediction = classifier.predict(latestData);
 
     console.log("\n📌 Final Classification Result:");
