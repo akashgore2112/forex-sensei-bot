@@ -105,7 +105,7 @@ async function predictWithPython(latestCandle) {
       }
     });
 
-    // ✅ Only send latest candle (not entire dataset)
+    // ✅ Only send latest candle (fix for EPIPE)
     py.stdin.write(JSON.stringify(latestCandle));
     py.stdin.end();
   });
