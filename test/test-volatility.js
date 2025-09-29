@@ -1,83 +1,91 @@
 // test/test-volatility.js
-// 🧪 Volatility Predictor Test Runner
+// Volatility Predictor Test with Debugging
 
+const VolatilityPredictor = require("../ml-pipeline/models/volatility-predictor");
+const trainVolatilityModel = require("../ml-pipeline/training/volatility-trainer");
 const MTFA = require("../mtfa");
 const SwingIndicators = require("../swing-indicators");
-const VolatilityTrainer = require("../ml-pipeline/training/volatility-trainer");
+const fs = require("fs");
+const path = require("path");
 
-async function processCandles(pair = "EUR/USD") {
-  console.log(`📊 Fetching MTFA data for ${pair}...`);
-  const mtfaResult = await MTFA.analyze(pair);
+const modelPath = path.join(__dirname, "../saved-models/volatility-model.json");
+
+async function runVolatilityTest() {
+  console.log("🚀 Testing Volatility Predictor...\n");
+
+  // Step 1: Fetch data from MTFA (Phase 1)
+  console.log("📊 Fetching MTFA data for EUR/USD...");
+  const mtfaResult = await MTFA.analyze("EUR/USD");
 
   if (!mtfaResult || !mtfaResult.dailyCandles?.length) {
-    throw new Error("❌ MTFA did not return daily candles. Check Phase 1 system.");
+    throw new Error("❌ No daily candles returned from MTFA. Check Phase 1 system.");
   }
 
   const candles = mtfaResult.dailyCandles;
   console.log(`✅ Got ${candles.length} daily candles from MTFA`);
 
-  console.log("📈 Calculating indicators on MTFA candles...");
+  // Step 2: Calculate indicators (Phase 1 → SwingIndicators)
+  console.log("📈 Calculating indicators...");
   const indicators = await SwingIndicators.calculateAll(candles);
 
-  // 🔄 Merge candles + indicators
+  // Step 3: Merge candles + indicators
   console.log("🔄 Merging candles with indicators...");
   const processed = candles.map((c, i) => ({
-    ...c,
-    ema20: indicators.ema20?.[i] || 0,
-    ema50: indicators.ema50?.[i] || 0,
-    rsi: indicators.rsi14?.[i] || 0,
-    atr: indicators.atr?.[i] || 0,
-    macd: {
-      macd: indicators.macd?.macd?.[i] || 0,
-      signal: indicators.macd?.signal?.[i] || 0,
-    },
-    volume: c.volume || 0,
-    avgVolume: indicators.avgVolume?.[i] || c.volume || 1,
+    close: c.close,
+    high: c.high,
+    low: c.low,
+    volume: c.volume,
+    atr: indicators.atr?.[i],
+    rsi: indicators.rsi14?.[i],
+    ema20: indicators.ema20?.[i],
+    ema50: indicators.ema50?.[i],
+    macd: indicators.macd ? {
+      macd: indicators.macd.macd?.[i],
+      signal: indicators.macd.signal?.[i],
+      histogram: indicators.macd.histogram?.[i]
+    } : undefined
   }));
 
-  // 🧹 Filter invalid samples
+  // 🟢 DEBUG: Print first 5 processed candles
+  console.log("\n🔍 DEBUG: First 5 processed samples:");
+  processed.slice(0, 5).forEach((p, idx) => {
+    console.log(`[${idx}]`, JSON.stringify(p, null, 2));
+  });
+
+  // Step 4: Filter invalid samples
   const validProcessed = processed.filter(
-    (d) =>
-      d.close &&
-      d.atr &&
-      d.rsi !== undefined &&
-      d.ema20 !== undefined &&
-      d.ema50 !== undefined
+    d => d.close && d.atr !== undefined && d.rsi !== undefined
   );
 
-  console.log(`📊 Valid samples: ${validProcessed.length}/${processed.length}`);
-  return validProcessed;
-}
+  console.log(`\n📊 Valid samples after filtering: ${validProcessed.length}/${processed.length}`);
 
-async function runVolatilityTest() {
-  console.log("🚀 Starting Volatility Predictor Test...");
-  const trainer = new VolatilityTrainer();
-
-  try {
-    // 🔹 STEP 1: Prepare data
-    const processed = await processCandles("EUR/USD");
-
-    // 🔹 STEP 2: Train model
-    const metrics = await trainer.trainVolatilityModel(processed);
-
-    console.log("\n✅ Training complete!");
-    console.log(`   MAE: ${metrics.meanAbsoluteError.toFixed(6)}\n`);
-
-    // 🔹 STEP 3: Prediction on latest candle
-    const predictor = trainer.getPredictor();
-    const latestData = processed[processed.length - 1];
-    const forecast = predictor.predict(latestData);
-
-    console.log("🔮 Volatility Forecast (latest candle):");
-    console.log("──────────────────────────────────────");
-    console.log(forecast);
-
-    console.log("\n🎯 Test Completed Successfully!");
-  } catch (err) {
-    console.error("\n❌ Test failed:", err.message);
-    console.error(err.stack);
+  if (validProcessed.length < 50) {
+    throw new Error(`❌ Not enough valid samples (${validProcessed.length}). Check Phase 1 indicators.`);
   }
+
+  // Step 5: Train or Load Volatility Predictor
+  let predictor = new VolatilityPredictor();
+
+  if (fs.existsSync(modelPath)) {
+    console.log("📂 Loading saved volatility model...");
+    await predictor.loadModel(modelPath);
+  } else {
+    console.log("⚡ Training new volatility model...");
+    await trainVolatilityModel(predictor, validProcessed);
+    await predictor.saveModel(modelPath);
+  }
+
+  // Step 6: Predict volatility on latest data
+  const latestData = validProcessed.slice(-60); // last 60 candles
+  const forecast = predictor.predict(latestData);
+
+  console.log("\n📌 Volatility Forecast:");
+  console.log(JSON.stringify(forecast, null, 2));
 }
 
-// Main
-runVolatilityTest();
+runVolatilityTest().catch(err => {
+  console.error("\n❌❌❌ FATAL ERROR ❌❌❌");
+  console.error(err.message);
+  console.error(err.stack);
+  process.exit(1);
+});
