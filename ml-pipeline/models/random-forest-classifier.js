@@ -1,5 +1,5 @@
 // ml-pipeline/models/random-forest-classifier.js
-const RandomForest = require('random-forest-classifier').RandomForest;
+const DecisionTreeClassifier = require('ml-cart').DecisionTreeClassifier;
 const fs = require('fs');
 
 class SwingSignalClassifier {
