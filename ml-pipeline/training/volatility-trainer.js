@@ -1,21 +1,20 @@
 // ============================================================================
 // ⚡ Training pipeline for Volatility Predictor (Phase 2 - Step 1.3)
-// Updated: Array-based training (no DMatrix usage)
-// Diagnostic mode enabled for transparency
+// Updated: Python XGBoost backend
 // ============================================================================
 
 const fs = require("fs");
 const path = require("path");
-const VolatilityPredictor = require("../models/volatility-predictor");
+const { spawn } = require("child_process");
 
 class VolatilityTrainer {
   constructor() {
-    this.predictor = new VolatilityPredictor();
-    this.modelPath = path.join(__dirname, "../../saved-models/volatility-model.json");
+    this.modelPath = path.join(__dirname, "../../saved-models/volatility-model.xgb"); 
+    this.pythonScript = path.join(__dirname, "volatility_trainer.py");
   }
 
   /**
-   * 📌 Train model with historical market data
+   * 📌 Train model with historical market data using Python backend
    * @param {Array} historicalData - Array of candle objects with indicators
    */
   async trainVolatilityModel(historicalData) {
@@ -26,44 +25,77 @@ class VolatilityTrainer {
     }
 
     console.log("\n───────────────────────────────────────────────");
-    console.log(`📊 Starting volatility model training...`);
+    console.log("📊 Starting volatility model training (Python backend)...");
     console.log(`   Input candles: ${historicalData.length}`);
     console.log("───────────────────────────────────────────────\n");
 
-    // 🔥 Call predictor training
-    const metrics = await this.predictor.trainModel(historicalData);
+    return new Promise((resolve, reject) => {
+      const py = spawn("python3", [this.pythonScript]);
 
-    console.log("\n📈 Training Summary:");
-    console.log(`   ✅ Total Samples:   ${metrics.samples}`);
-    console.log(`   ✅ Train Size:      ${metrics.trainSize}`);
-    console.log(`   ✅ Test Size:       ${metrics.testSize}`);
-    console.log(`   📉 Mean Abs. Error: ${metrics.meanAbsoluteError.toFixed(6)}\n`);
+      let output = "";
+      let error = "";
 
-    // Save model
-    await this.predictor.saveModel(this.modelPath);
-    console.log(`💾 Volatility model saved to: ${this.modelPath}`);
+      py.stdout.on("data", (data) => {
+        output += data.toString();
+      });
 
-    return metrics;
+      py.stderr.on("data", (data) => {
+        error += data.toString();
+      });
+
+      py.on("close", (code) => {
+        if (code !== 0) {
+          return reject(new Error(`❌ Python script failed: ${error}`));
+        }
+
+        try {
+          const result = JSON.parse(output.trim());
+
+          if (result.error) {
+            return reject(new Error(result.error));
+          }
+
+          console.log("\n📈 Training Summary:");
+          console.log(`   ✅ Total Samples:   ${result.samples}`);
+          console.log(`   ✅ Train Size:      ${result.trainSize}`);
+          console.log(`   ✅ Test Size:       ${result.testSize}`);
+          console.log(`   📉 Mean Abs. Error: ${result.mae.toFixed(6)}\n`);
+
+          console.log(`💾 Volatility model saved to: ${result.modelPath}`);
+
+          resolve(result);
+        } catch (err) {
+          reject(new Error(`❌ Failed to parse Python output: ${output}\n${err.message}`));
+        }
+      });
+
+      // Send candles to Python
+      py.stdin.write(JSON.stringify(historicalData));
+      py.stdin.end();
+    });
   }
 
   /**
-   * 📌 Load existing model from disk
+   * 📌 Load existing model (placeholder, actual prediction via Python will be added later)
    */
   async loadExistingModel() {
-    console.log(`📂 Loading saved volatility model from ${this.modelPath}...`);
-    await this.predictor.loadModel(this.modelPath);
-    console.log("✅ Model loaded successfully!");
-    return this.predictor;
+    if (!fs.existsSync(this.modelPath)) {
+      throw new Error("❌ Saved model not found");
+    }
+    console.log(`📂 Volatility model found at ${this.modelPath}`);
+    console.log("✅ Model is ready (Python will handle loading for prediction).");
+    return true;
   }
 
   /**
-   * 📌 Get predictor instance (after training or loading)
+   * 📌 Get predictor instance
    */
   getPredictor() {
-    if (!this.predictor.trained) {
-      throw new Error("❌ Predictor not trained or loaded yet.");
-    }
-    return this.predictor;
+    return {
+      predict: () => {
+        throw new Error("❌ Prediction not yet implemented in Python bridge");
+      }
+    };
   }
 }
 
