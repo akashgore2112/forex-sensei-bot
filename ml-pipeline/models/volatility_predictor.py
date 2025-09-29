@@ -1,6 +1,6 @@
 # =============================================================================
 # 📊 XGBoost Volatility Predictor (Python version)
-# Phase 2 - Step 1.3 (Prediction Only)
+# Phase 2 - Step 1.3
 # Safe mode: handles volume=0 gracefully
 # =============================================================================
 
@@ -25,6 +25,7 @@ class VolatilityPredictor:
 
         required = ["close", "high", "low", "atr", "rsi", "adx"]
         if any(current.get(f) in [None, 0] for f in required):
+            print(f"⚠️ Skipped sample @i={i} → Missing required core fields", file=sys.stderr)
             return None
 
         atr = current["atr"]
@@ -38,6 +39,7 @@ class VolatilityPredictor:
         features = [atr, atr_change, intraday_range, rsi_velocity, vol_ratio, swings, adx]
 
         if not all(np.isfinite(features)):
+            print(f"⚠️ Skipped sample @i={i} → Non-finite feature values {features}", file=sys.stderr)
             return None
 
         return features
@@ -54,12 +56,81 @@ class VolatilityPredictor:
                 swings += 1
         return swings
 
+    def calculate_future_volatility(self, data, i, horizon=5):
+        future_slice = data[i + 1:i + 1 + horizon]
+        if not future_slice:
+            print(f"⚠️ Skipped sample @i={i} → No future candles", file=sys.stderr)
+            return None
+
+        atr_values = [c["atr"] for c in future_slice if c.get("atr") is not None]
+        if not atr_values:
+            print(f"⚠️ Skipped sample @i={i} → Future ATR missing", file=sys.stderr)
+            return None
+
+        return np.mean(atr_values)
+
+    # =========================================================================
+    # 📌 Training
+    # =========================================================================
+    def train_model(self, historical_data):
+        features, targets = [], []
+
+        print(f"📊 Preparing training dataset from {len(historical_data)} candles...")
+
+        for i in range(20, len(historical_data) - 5):
+            f = self.prepare_features(historical_data, i)
+            t = self.calculate_future_volatility(historical_data, i, 5)
+            if f and t and t > 0:
+                features.append(f)
+                targets.append(t)
+
+        print(f"✅ Prepared {len(features)} samples for training")
+
+        if len(features) < 300:
+            raise ValueError(f"❌ Not enough valid samples (need 300+, got {len(features)})")
+
+        split = int(len(features) * 0.8)
+        X_train, y_train = np.array(features[:split]), np.array(targets[:split])
+        X_test, y_test = np.array(features[split:]), np.array(targets[split:])
+
+        print("⚡ Training XGBoost regressor...")
+
+        dtrain = xgb.DMatrix(X_train, label=y_train)
+        dtest = xgb.DMatrix(X_test, label=y_test)
+
+        params = {
+            "objective": "reg:squarederror",
+            "max_depth": 6,
+            "eta": 0.1,
+            "subsample": 0.8,
+            "colsample_bytree": 0.8,
+        }
+
+        self.model = xgb.train(params, dtrain, num_boost_round=200)
+
+        preds = self.model.predict(dtest)
+        mae = float(np.mean(np.abs(preds - y_test)))
+
+        self.training_metrics = {
+            "samples": len(features),
+            "trainSize": len(X_train),
+            "testSize": len(X_test),
+            "meanAbsoluteError": mae,
+        }
+
+        self.trained = True
+
+        print("✅ Training completed!")
+        print(f"📊 MAE on test set: {mae:.6f}")
+
+        return self.training_metrics
+
     # =========================================================================
     # 📌 Prediction
     # =========================================================================
     def predict(self, current_data):
         if not self.trained or self.model is None:
-            raise RuntimeError("❌ Model not loaded")
+            raise RuntimeError("❌ Model not trained or loaded")
 
         if isinstance(current_data, list):
             f = self.prepare_features(current_data, len(current_data) - 1)
@@ -100,8 +171,24 @@ class VolatilityPredictor:
         return 0.5
 
     # =========================================================================
-    # 📌 Load Model
+    # 📌 Save / Load
     # =========================================================================
+    def save_model(self, filepath="./saved-models/volatility-model.json"):
+        if not self.model:
+            raise RuntimeError("❌ No model to save")
+
+        os.makedirs(os.path.dirname(filepath), exist_ok=True)
+        self.model.save_model(filepath + ".bin")
+
+        save_obj = {
+            "trainedAt": str(np.datetime64("now")),
+            "trainingMetrics": self.training_metrics,
+        }
+        with open(filepath, "w") as f:
+            json.dump(save_obj, f)
+
+        print(f"💾 Model saved to {filepath} (+ binary at {filepath}.bin)")
+
     def load_model(self, filepath="./saved-models/volatility-model.json"):
         bin_path = filepath + ".bin"
         if not os.path.exists(bin_path):
@@ -115,29 +202,32 @@ class VolatilityPredictor:
             self.training_metrics = meta.get("trainingMetrics", None)
 
         self.trained = True
+        print(f"📂 Model loaded from {filepath}")
 
 
 # =========================================================================
-# 📌 CLI Wrapper (Node.js bridge: Prediction only)
+# 📌 CLI Wrapper (Node.js bridge)
 # =========================================================================
 if __name__ == "__main__":
     vp = VolatilityPredictor()
     try:
-        raw_input = sys.stdin.read().strip()
+        # 🔹 Read JSON candle from stdin (line-based fix for EPIPE)
+        raw_input = sys.stdin.readline().strip()
         if not raw_input:
             print(json.dumps({"error": "❌ No input received"}))
             sys.exit(1)
 
         candle = json.loads(raw_input)
 
+        # 🔹 Load existing model
         model_path = "./saved-models/volatility-model.json"
         vp.load_model(model_path)
 
+        # 🔹 Run prediction
         result = vp.predict(candle)
 
-        # Print JSON result for Node.js
+        # 🔹 Print JSON result
         print(json.dumps(result))
-        sys.stdout.flush()   # ✅ prevents EPIPE
 
     except Exception as e:
         print(json.dumps({"error": str(e)}))
