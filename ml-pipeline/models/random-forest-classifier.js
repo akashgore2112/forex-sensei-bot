@@ -4,7 +4,8 @@ const fs = require('fs');
 
 class SwingSignalClassifier {
   constructor() {
-    this.model = null;
+    this.trees = [];
+    this.nTrees = 100;
     this.labelMap = { BUY: 0, SELL: 1, HOLD: 2 };
     this.reverseLabel = ["BUY", "SELL", "HOLD"];
     this.trainingMetrics = null;
@@ -16,9 +17,8 @@ class SwingSignalClassifier {
   }
 
   prepareFeatures(marketData) {
-    // Better feature engineering with normalization
     const emaTrend = marketData.ema20 > marketData.ema50 ? 1 : -1;
-    const rsiNorm = this.safeNumber((marketData.rsi - 50) / 50); // -1 to 1
+    const rsiNorm = this.safeNumber((marketData.rsi - 50) / 50);
     
     const macdDiff = this.safeNumber(marketData.macd?.macd || 0) - 
                      this.safeNumber(marketData.macd?.signal || 0);
@@ -61,19 +61,15 @@ class SwingSignalClassifier {
       
       if (classIndices.length === 0) return;
       
-      // Add all original samples
       classIndices.forEach(i => {
         balancedData.push([...data[i]]);
         balancedLabels.push(classLabel);
       });
       
-      // Oversample minority class with noise
       const needed = maxCount - classIndices.length;
       for (let i = 0; i < needed; i++) {
         const randomIdx = classIndices[Math.floor(Math.random() * classIndices.length)];
         const sample = [...data[randomIdx]];
-        
-        // Add small noise to create variation
         const noisySample = sample.map(v => v + (Math.random() - 0.5) * 0.05);
         
         balancedData.push(noisySample);
@@ -108,10 +104,9 @@ class SwingSignalClassifier {
 
       const priceChange = (futurePrice - currentPrice) / currentPrice;
       
-      // Looser thresholds for more balanced labels
       let label = "HOLD";
-      if (priceChange > 0.005) label = "BUY";        // 0.5% threshold
-      else if (priceChange < -0.005) label = "SELL"; // 0.5% threshold
+      if (priceChange > 0.005) label = "BUY";
+      else if (priceChange < -0.005) label = "SELL";
 
       allData.push(features);
       allLabels.push(this.labelMap[label]);
@@ -121,7 +116,6 @@ class SwingSignalClassifier {
       throw new Error("No valid training data");
     }
 
-    // Train/test split
     const splitIndex = Math.floor(allData.length * 0.8);
     const trainData = allData.slice(0, splitIndex);
     const trainLabels = allLabels.slice(0, splitIndex);
@@ -130,23 +124,37 @@ class SwingSignalClassifier {
 
     console.log(`Train: ${trainData.length}, Test: ${testData.length}`);
 
-    // Balance training data
     const { balancedData, balancedLabels } = this.balanceDataset(trainData, trainLabels);
 
-    // Train Random Forest
-    this.model = new RandomForest({
-      n_estimators: 100,
-      max_features: 'sqrt',
-      max_depth: 15,
-      min_samples_split: 5,
-      min_samples_leaf: 2
-    });
-
-    console.log("Training Random Forest (100 trees)...");
-    this.model.fit(balancedData, balancedLabels);
+    console.log(`Training Random Forest (${this.nTrees} trees)...`);
+    this.trees = [];
+    
+    for (let i = 0; i < this.nTrees; i++) {
+      const bootstrapData = [];
+      const bootstrapLabels = [];
+      
+      for (let j = 0; j < balancedData.length; j++) {
+        const randomIdx = Math.floor(Math.random() * balancedData.length);
+        bootstrapData.push(balancedData[randomIdx]);
+        bootstrapLabels.push(balancedLabels[randomIdx]);
+      }
+      
+      const tree = new DecisionTreeClassifier({
+        gainFunction: 'gini',
+        maxDepth: 15,
+        minNumSamples: 5
+      });
+      
+      tree.train(bootstrapData, bootstrapLabels);
+      this.trees.push(tree);
+      
+      if ((i + 1) % 20 === 0) {
+        console.log(`  Trained ${i + 1}/${this.nTrees} trees...`);
+      }
+    }
+    
     console.log("Training completed!");
 
-    // Evaluate
     this.trainingMetrics = this.evaluateModel(testData, testLabels);
     
     console.log("\nMODEL PERFORMANCE (Test Set):");
@@ -161,7 +169,7 @@ class SwingSignalClassifier {
   }
 
   evaluateModel(testData, testLabels) {
-    const predictions = testData.map(features => this.model.predict([features])[0]);
+    const predictions = testData.map(features => this.predictSingle(features));
     
     const accuracy = predictions.filter((p, i) => p === testLabels[i]).length / testLabels.length;
     
@@ -199,13 +207,28 @@ class SwingSignalClassifier {
     return { accuracy, confusionMatrix, classMetrics: metrics, averageF1 };
   }
 
+  predictSingle(features) {
+    const votes = [0, 0, 0];
+    
+    this.trees.forEach(tree => {
+      try {
+        const prediction = tree.predict([features])[0];
+        votes[prediction]++;
+      } catch (e) {}
+    });
+    
+    return votes.indexOf(Math.max(...votes));
+  }
+
   predict(currentData) {
-    if (!this.model) throw new Error("Model not trained");
+    if (!this.trees || this.trees.length === 0) {
+      throw new Error("Model not trained");
+    }
     
     const features = this.prepareFeatures(currentData);
     if (features.length !== 7) throw new Error("Invalid features");
 
-    const prediction = this.model.predict([features])[0];
+    const prediction = this.predictSingle(features);
     const probabilities = this.calculateProbabilities(features);
 
     return {
@@ -218,14 +241,12 @@ class SwingSignalClassifier {
   calculateProbabilities(features) {
     const votes = { BUY: 0, SELL: 0, HOLD: 0 };
     
-    if (this.model && this.model.trees) {
-      this.model.trees.forEach(tree => {
-        try {
-          const pred = tree.predict([features])[0];
-          votes[this.reverseLabel[pred]]++;
-        } catch (e) {}
-      });
-    }
+    this.trees.forEach(tree => {
+      try {
+        const pred = tree.predict([features])[0];
+        votes[this.reverseLabel[pred]]++;
+      } catch (e) {}
+    });
     
     const total = Object.values(votes).reduce((a, b) => a + b, 0) || 1;
     return {
@@ -236,14 +257,13 @@ class SwingSignalClassifier {
   }
 
   async saveModel(filepath = './saved-models/rf-model.json') {
-    if (!this.model) throw new Error("No model to save");
+    if (!this.trees || this.trees.length === 0) {
+      throw new Error("No model to save");
+    }
     
     const modelData = {
-      trees: this.model.trees,
-      config: {
-        n_estimators: this.model.n_estimators,
-        max_depth: this.model.max_depth
-      },
+      trees: this.trees.map(tree => tree.toJSON()),
+      nTrees: this.nTrees,
       trainingMetrics: this.trainingMetrics,
       metadata: { trainedAt: new Date().toISOString() }
     };
@@ -255,8 +275,10 @@ class SwingSignalClassifier {
   async loadModel(filepath = './saved-models/rf-model.json') {
     const modelData = JSON.parse(await fs.promises.readFile(filepath, 'utf8'));
     
-    this.model = new RandomForest(modelData.config);
-    this.model.trees = modelData.trees;
+    this.nTrees = modelData.nTrees;
+    this.trees = modelData.trees.map(treeData => 
+      DecisionTreeClassifier.load(treeData)
+    );
     this.trainingMetrics = modelData.trainingMetrics;
     
     console.log(`Model loaded from ${filepath}`);
