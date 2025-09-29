@@ -1,106 +1,187 @@
+// test/test-lstm-real.js
+// ✅ FIXED VERSION - Consistent key naming & better error handling
+
 const fs = require("fs");
 const path = require("path");
 const tf = require("@tensorflow/tfjs-node");
 
 const LSTMPricePredictor = require("../ml-pipeline/models/lstm-predictor");
 const DataPreprocessor = require("../ml-pipeline/training/data-preprocessor");
-const MTFA = require("../mtfa"); // ✅ Phase 1 MTFA
+const MTFA = require("../mtfa");
 const SwingIndicators = require("../swing-indicators");
 
 async function runRealLSTMTest() {
-  console.log("🚀 Starting Step 1.1: LSTM Training/Loading with MTFA Daily Data...");
+  console.log("🚀 Starting LSTM Training/Testing with MTFA Daily Data...\n");
 
-  const modelPath = "file://./saved-models/lstm-model";
+  const modelPath = "file://./saved-models/lstm-price-predictor";
   const predictor = new LSTMPricePredictor();
   const preprocessor = new DataPreprocessor(60, 5);
 
-  // 1. Fetch MTFA Analysis
-  console.log("📊 Running MTFA to fetch candles + indicators...");
-  const mtfaResult = await MTFA.analyze("EUR/USD");
+  try {
+    // ========================================
+    // 1️⃣ Fetch MTFA Analysis
+    // ========================================
+    console.log("📊 Running MTFA to fetch candles + indicators...");
+    const mtfaResult = await MTFA.analyze("EUR/USD");
 
-  if (!mtfaResult || !mtfaResult.dailyCandles?.length) {
-    throw new Error("❌ MTFA did not return daily candles. Check Phase 1 system.");
-  }
-
-  const candles = mtfaResult.dailyCandles;
-  console.log(`✅ Got ${candles.length} daily candles from MTFA`);
-
-  // 2. Recalculate indicators for consistency
-  console.log("📈 Calculating indicators on MTFA candles...");
-  const indicators = await SwingIndicators.calculateAll(candles);
-
-  // 3. Merge candles + indicators
-  const processed = candles.map((c, i) => ({
-    close: c.close,
-    ema20: Array.isArray(indicators.ema20) ? indicators.ema20[i] : indicators.ema20,
-    rsi: Array.isArray(indicators.rsi14) ? indicators.rsi14[i] : indicators.rsi14,
-    macd: indicators.macd && Array.isArray(indicators.macd.MACD)
-      ? indicators.macd.MACD[i]
-      : indicators.macd?.MACD || 0,
-    atr: Array.isArray(indicators.atr) ? indicators.atr[i] : indicators.atr
-  }));
-
-  console.log(`✅ Processed ${processed.length} candles with indicators`);
-
-  // 4. Load-or-Train Logic
-  let modelLoaded = false;
-  if (fs.existsSync(path.join("saved-models", "lstm-model", "model.json"))) {
-    try {
-      predictor.model = await tf.loadLayersModel(modelPath + "/model.json");
-      console.log("✅ Pre-trained LSTM Model Loaded Successfully!");
-      modelLoaded = true;
-    } catch (err) {
-      console.warn("⚠️ Failed to load saved model. Retraining...", err.message);
+    if (!mtfaResult || !mtfaResult.dailyCandles?.length) {
+      throw new Error("❌ MTFA did not return daily candles. Check Phase 1 system.");
     }
-  }
 
-  if (!modelLoaded) {
-    console.log("⚡ Training LSTM on MTFA daily data...");
-    const { features, targets } = preprocessor.createSequences(processed);
+    const candles = mtfaResult.dailyCandles;
+    console.log(`✅ Got ${candles.length} daily candles from MTFA\n`);
 
-    await predictor.buildModel();
-    await predictor.model.fit(features, targets, {
-      epochs: 50,
-      batchSize: 32,
-      validationSplit: 0.2,
-      callbacks: [
-        {
-          onEpochEnd: (epoch, logs) => {
-            console.log(
-              `📉 Epoch ${epoch + 1}: loss=${logs.loss.toFixed(6)}, val_loss=${logs.val_loss?.toFixed(6)}`
-            );
-          }
-        }
-      ],
+    // ========================================
+    // 2️⃣ Recalculate Indicators for Consistency
+    // ========================================
+    console.log("📈 Calculating indicators on MTFA candles...");
+    const indicators = await SwingIndicators.calculateAll(candles);
+
+    // ========================================
+    // 3️⃣ Merge Candles + Indicators with FIXED KEY NAMES
+    // ========================================
+    console.log("🔄 Merging candles with indicators...");
+    const processed = candles.map((c, i) => {
+      // ✅ Handle indicator arrays properly
+      const ema20Val = Array.isArray(indicators.ema20) 
+        ? indicators.ema20[i]?.value ?? indicators.ema20[i] ?? 0
+        : indicators.ema20 ?? 0;
+      
+      const rsiVal = Array.isArray(indicators.rsi14)
+        ? indicators.rsi14[i]?.value ?? indicators.rsi14[i] ?? 0
+        : indicators.rsi14 ?? 0;
+      
+      const macdVal = indicators.macd && Array.isArray(indicators.macd.MACD)
+        ? indicators.macd.MACD[i]?.value ?? indicators.macd.MACD[i] ?? 0
+        : indicators.macd?.MACD ?? 0;
+      
+      const atrVal = Array.isArray(indicators.atr)
+        ? indicators.atr[i]?.value ?? indicators.atr[i] ?? 0
+        : indicators.atr ?? 0;
+
+      return {
+        close: c.close,
+        ema20: ema20Val,
+        rsi: rsiVal,      // ✅ FIXED: consistent key name (not rsi14)
+        macd: macdVal,
+        atr: atrVal
+      };
     });
 
-    console.log("✅ Training Completed!");
-    await predictor.model.save(modelPath);
-    console.log("💾 Model Saved to ./saved-models/lstm-model");
-  }
+    // ✅ Filter out invalid data points
+    const validProcessed = processed.filter(d => 
+      d.close && !isNaN(d.close) &&
+      d.ema20 && !isNaN(d.ema20) &&
+      d.rsi !== undefined && !isNaN(d.rsi) &&
+      d.macd !== undefined && !isNaN(d.macd) &&
+      d.atr && !isNaN(d.atr)
+    );
 
-  // 5. Predict Next 5 Days
-  console.log("\n🔮 Making 5-day prediction...");
-  const recentData = processed.slice(-60);
+    console.log(`✅ Processed ${validProcessed.length} valid candles with indicators\n`);
 
-  try {
+    if (validProcessed.length < 100) {
+      throw new Error(`❌ Not enough valid data: need 100+, got ${validProcessed.length}`);
+    }
+
+    // ========================================
+    // 4️⃣ Load or Train Model
+    // ========================================
+    let modelLoaded = false;
+    const modelFilePath = path.join("saved-models", "lstm-price-predictor", "model.json");
+    
+    if (fs.existsSync(modelFilePath)) {
+      try {
+        await predictor.loadModel(modelPath + "/model.json");
+        console.log("✅ Pre-trained LSTM Model Loaded Successfully!\n");
+        modelLoaded = true;
+      } catch (err) {
+        console.warn("⚠️ Failed to load saved model. Will train new model...");
+        console.warn(`   Error: ${err.message}\n`);
+      }
+    } else {
+      console.log("📝 No saved model found. Training new model...\n");
+    }
+
+    // ========================================
+    // 5️⃣ Train Model if Not Loaded
+    // ========================================
+    if (!modelLoaded) {
+      console.log("⚡ Training LSTM on MTFA daily data...");
+      console.log(`   Data points: ${validProcessed.length}`);
+      console.log(`   Lookback: 60 days`);
+      console.log(`   Prediction horizon: 5 days\n`);
+
+      await predictor.trainModel(validProcessed);
+      console.log("\n✅ Training Completed!\n");
+    }
+
+    // ========================================
+    // 6️⃣ Make Prediction on Recent Data
+    // ========================================
+    console.log("🔮 Making 5-day price prediction...\n");
+    const recentData = validProcessed.slice(-60);
+
     const prediction = await predictor.predict(recentData);
 
-    // ✅ Format output
-    const formattedResult = {
-      predictedPrices: prediction.predictedPrices.map(p => Number(p.toFixed(5))),
-      confidence: prediction.confidence ?? 0.0,
-      direction: prediction.direction,
-      volatility: prediction.volatility ?? "UNKNOWN"
+    // ========================================
+    // 7️⃣ Format & Display Results
+    // ========================================
+    console.log("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
+    console.log("📊 LSTM PREDICTION RESULTS");
+    console.log("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
+    console.log(`\n📍 Current Price: ${prediction.currentPrice}`);
+    console.log(`\n🎯 Predicted Prices (Next 5 Days):`);
+    prediction.predictedPrices.forEach((price, i) => {
+      console.log(`   Day ${i + 1}: ${price}`);
+    });
+    console.log(`\n📈 Direction: ${prediction.direction}`);
+    console.log(`📊 Confidence: ${(prediction.confidence * 100).toFixed(1)}%`);
+    console.log(`💹 Expected Change: ${prediction.percentChange}%`);
+    console.log(`📉 Volatility: ${prediction.volatility}`);
+    console.log("\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n");
+
+    // ========================================
+    // 8️⃣ Return Formatted Result
+    // ========================================
+    return {
+      success: true,
+      pair: "EUR/USD",
+      prediction: prediction,
+      dataQuality: {
+        totalCandles: candles.length,
+        validDataPoints: validProcessed.length,
+        trainingDataUsed: validProcessed.length - 65
+      }
     };
 
-    console.log("\n📌 Final Prediction Result:");
-    console.dir(formattedResult, { depth: null });
   } catch (err) {
-    console.error("❌ Prediction failed:", err.message);
+    console.error("\n❌ ERROR in LSTM Test:");
+    console.error(`   ${err.message}`);
+    console.error("\n" + err.stack);
+    return {
+      success: false,
+      error: err.message
+    };
   }
 }
 
-runRealLSTMTest().catch((err) => {
-  console.error("❌ Error in LSTM real test:", err);
-});
+// ========================================
+// Run Test
+// ========================================
+if (require.main === module) {
+  runRealLSTMTest()
+    .then(result => {
+      if (result.success) {
+        console.log("✅ LSTM Test Completed Successfully!");
+      } else {
+        console.log("❌ LSTM Test Failed");
+        process.exit(1);
+      }
+    })
+    .catch(err => {
+      console.error("❌ Fatal error:", err);
+      process.exit(1);
+    });
+}
+
+module.exports = runRealLSTMTest;
