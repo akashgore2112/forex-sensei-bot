@@ -1,11 +1,15 @@
 // test/test-rfc.js
-// 📊 Step 1.2 - Random Forest Classifier Test with MTFA Data + Load-or-Train System
+// 📊 Step 1.2 - Random Forest Classifier Test with MTFA Data + Load-or-Train + Force Retrain Option
 
 const SwingSignalClassifier = require("../ml-pipeline/models/random-forest-classifier");
 const MTFA = require("../mtfa");
 const SwingIndicators = require("../swing-indicators");
 const fs = require("fs");
 const path = require("path");
+
+// ✅ CLI flag check
+const args = process.argv.slice(2);
+const forceRetrain = args.includes("--force-train");
 
 async function runRFCTest() {
   console.log("🚀 Starting Step 1.2: Random Forest Classifier Test...");
@@ -16,8 +20,8 @@ async function runRFCTest() {
   let modelLoaded = false;
   let latestData = null;
 
-  // 🔹 Try to load model if it exists
-  if (fs.existsSync(modelPath)) {
+  // 🔹 Load model if exists and retrain not forced
+  if (!forceRetrain && fs.existsSync(modelPath)) {
     try {
       await classifier.loadModel(modelPath);
       console.log("✅ Pre-trained Random Forest model loaded successfully!");
@@ -25,6 +29,8 @@ async function runRFCTest() {
     } catch (err) {
       console.warn("⚠️ Failed to load saved model, will retrain instead:", err.message);
     }
+  } else if (forceRetrain) {
+    console.log("⚠️ Force retrain requested → skipping model load.");
   }
 
   // 🔹 If model not loaded → retrain
@@ -122,7 +128,6 @@ async function runRFCTest() {
   console.log("\n===============================");
   console.log("🔮 [6/6] Making classification on last candle...");
   try {
-    // Use last processed candle if available, else dummy
     const dataForPrediction =
       latestData ||
       {
