@@ -1,6 +1,6 @@
 // ============================================================================
 // 📊 Volatility Predictor Test (Phase 2 - Step 1.3)
-// FIXED: Training in Node.js, Prediction via Python on latest candle
+// FINAL SAFE VERSION: Fix for EPIPE → sends JSON + newline
 // ============================================================================
 
 const MTFA = require("../mtfa");
@@ -105,8 +105,8 @@ async function predictWithPython(latestCandle) {
       }
     });
 
-    // ✅ Only send latest candle (fix for EPIPE)
-    py.stdin.write(JSON.stringify(latestCandle));
+    // ✅ Fix: Send JSON + newline (for Python's readline)
+    py.stdin.write(JSON.stringify(latestCandle) + "\n");
     py.stdin.end();
   });
 }
