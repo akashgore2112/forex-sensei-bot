@@ -1,54 +1,83 @@
 // test/test-volatility.js
-const VolatilityPredictor = require("../ml-pipeline/models/volatility-predictor");
-const { trainVolatilityModel } = require("../ml-pipeline/training/volatility-trainer");
-const fs = require("fs");
+// 🧪 Volatility Predictor Test Runner
 
-async function runTest() {
-  console.log("🚀 Testing Volatility Predictor...");
+const MTFA = require("../mtfa");
+const SwingIndicators = require("../swing-indicators");
+const VolatilityTrainer = require("../ml-pipeline/training/volatility-trainer");
 
-  const predictor = new VolatilityPredictor();
-  const modelPath = "./saved-models/volatility-model.json";
+async function processCandles(pair = "EUR/USD") {
+  console.log(`📊 Fetching MTFA data for ${pair}...`);
+  const mtfaResult = await MTFA.analyze(pair);
 
-  if (fs.existsSync(modelPath)) {
-    console.log("📂 Loading existing model...");
-    await predictor.loadModel(modelPath);
-  } else {
-    console.log("⚠️ No saved model found → training new one...");
-    await trainVolatilityModel();
-    await predictor.loadModel(modelPath);
+  if (!mtfaResult || !mtfaResult.dailyCandles?.length) {
+    throw new Error("❌ MTFA did not return daily candles. Check Phase 1 system.");
   }
 
-  const MTFA = require("../mtfa");
-  const SwingIndicators = require("../swing-indicators");
+  const candles = mtfaResult.dailyCandles;
+  console.log(`✅ Got ${candles.length} daily candles from MTFA`);
 
-  console.log("📊 Fetching latest data...");
-  const mtfa = await MTFA.analyze("EUR/USD");
-  const candles = mtfa.dailyCandles;
+  console.log("📈 Calculating indicators on MTFA candles...");
   const indicators = await SwingIndicators.calculateAll(candles);
 
+  // 🔄 Merge candles + indicators
+  console.log("🔄 Merging candles with indicators...");
   const processed = candles.map((c, i) => ({
-    close: c.close,
-    high: c.high,
-    low: c.low,
-    volume: c.volume,
+    ...c,
+    ema20: indicators.ema20?.[i] || 0,
+    ema50: indicators.ema50?.[i] || 0,
+    rsi: indicators.rsi14?.[i] || 0,
     atr: indicators.atr?.[i] || 0,
-    rsi: indicators.rsi14?.[i] || 50,
-    adx: indicators.adx?.[i] || 20,
-    avgVolume:
-      candles
-        .slice(Math.max(0, i - 20), i)
-        .map(x => x.volume || 0)
-        .reduce((a, b) => a + b, 0) / Math.min(i || 1, 20)
+    macd: {
+      macd: indicators.macd?.macd?.[i] || 0,
+      signal: indicators.macd?.signal?.[i] || 0,
+    },
+    volume: c.volume || 0,
+    avgVolume: indicators.avgVolume?.[i] || c.volume || 1,
   }));
 
-  console.log("🔮 Making prediction on latest candle...");
-  const forecast = await predictor.predict(processed);
+  // 🧹 Filter invalid samples
+  const validProcessed = processed.filter(
+    (d) =>
+      d.close &&
+      d.atr &&
+      d.rsi !== undefined &&
+      d.ema20 !== undefined &&
+      d.ema50 !== undefined
+  );
 
-  console.log("\n📌 VOLATILITY FORECAST:");
-  console.log(JSON.stringify(forecast, null, 2));
+  console.log(`📊 Valid samples: ${validProcessed.length}/${processed.length}`);
+  return validProcessed;
 }
 
-runTest().catch(err => {
-  console.error("❌ Test failed:", err);
-  process.exit(1);
-});
+async function runVolatilityTest() {
+  console.log("🚀 Starting Volatility Predictor Test...");
+  const trainer = new VolatilityTrainer();
+
+  try {
+    // 🔹 STEP 1: Prepare data
+    const processed = await processCandles("EUR/USD");
+
+    // 🔹 STEP 2: Train model
+    const metrics = await trainer.trainVolatilityModel(processed);
+
+    console.log("\n✅ Training complete!");
+    console.log(`   MAE: ${metrics.meanAbsoluteError.toFixed(6)}\n`);
+
+    // 🔹 STEP 3: Prediction on latest candle
+    const predictor = trainer.getPredictor();
+    const latestData = processed[processed.length - 1];
+    const forecast = predictor.predict(latestData);
+
+    console.log("🔮 Volatility Forecast (latest candle):");
+    console.log("──────────────────────────────────────");
+    console.log(forecast);
+
+    console.log("\n🎯 Test Completed Successfully!");
+  } catch (err) {
+    console.error("\n❌ Test failed:", err.message);
+    console.error(err.stack);
+  }
+}
+
+// Main
+runVolatilityTest();
