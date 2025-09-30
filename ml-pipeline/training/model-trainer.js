@@ -56,11 +56,13 @@ class ModelTrainer {
       throw new Error("❌ No valid training data for Random Forest");
     }
 
-    // Adapter → convert feature objects into numeric arrays
-    const X = features.map(f => Object.values(f));
-    const y = labels;
+    // 🔑 Adapter → Convert features + labels into synthetic candles
+    const candles = features.map((f, i) => ({
+      ...f,
+      label: labels[i]
+    }));
 
-    await rf.trainModel({ X, y });
+    await rf.trainModel(candles);
 
     const modelData = rf.saveModel ? rf.saveModel() : { message: "No saveModel implemented" };
     return this._saveModel("random-forest", modelData, options);
@@ -122,10 +124,13 @@ class ModelTrainer {
       throw new Error("❌ No valid training data for Market Regime Classifier");
     }
 
-    const X = features.map(f => Object.values(f));
-    const y = labels;
+    // 🔑 Adapter → Convert features + labels into synthetic candles
+    const candles = features.map((f, i) => ({
+      ...f,
+      label: labels[i]
+    }));
 
-    await regime.trainModel({ X, y });
+    await regime.trainModel(candles);
 
     const modelData = regime.saveModel ? regime.saveModel() : { message: "No saveModel implemented" };
     return this._saveModel("regime", modelData, options);
