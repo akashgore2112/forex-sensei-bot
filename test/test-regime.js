@@ -37,7 +37,9 @@ async function processCandles(pair = "EUR/USD") {
 // ============================================================================
 async function runMarketRegime(candles, indicators) {
   const classifier = new MarketRegimeClassifier();
-  const result = classifier.classifyRegime(candles, indicators);
+
+  // 🔹 Debug flag enabled here
+  const result = classifier.classifyRegime(candles, indicators, true);
 
   console.log("\n📌 MARKET REGIME FORECAST:");
   console.log("──────────────────────────────");
@@ -83,7 +85,7 @@ async function runAnalysis() {
 
     const { candles, indicators } = await processCandles("EUR/USD");
 
-    // Run Regime Classification
+    // Run Regime Classification (with debug)
     await runMarketRegime(candles, indicators);
 
     // Run Volatility Prediction
