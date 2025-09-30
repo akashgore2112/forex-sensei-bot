@@ -1,7 +1,7 @@
 // ============================================================================
 // 📊 Market Regime Classifier (Statistical Approach)
-// Phase 2 - Step 1.4
-// Added: Warm-up handling + candle usage logging + Debug Mode
+// Phase 2 - Step 1.4 (Polished)
+// Added: Dynamic confidence + subtype expansion + extended metrics
 // ============================================================================
 
 class MarketRegimeClassifier {
@@ -11,7 +11,7 @@ class MarketRegimeClassifier {
     }
 
     // --------------------------------------------------
-    // 🔹 Calculate usable candles (warm-up drop)
+    // 🔹 Warm-up handling
     // --------------------------------------------------
     const totalCandles = candles.length;
     const warmup = Math.max(200, 20, 14); // EMA200, BBANDS(20), ADX/ATR(14)
@@ -28,7 +28,7 @@ class MarketRegimeClassifier {
     }
 
     // --------------------------------------------------
-    // 🔹 Extract latest indicator values (safe fallback)
+    // 🔹 Latest Indicator Values
     // --------------------------------------------------
     const latest = {
       close: candles[totalCandles - 1]?.close ?? 0,
@@ -38,6 +38,7 @@ class MarketRegimeClassifier {
         .reduce((a, b) => a + b, 0) / 20 || 0,
       adx: this.safeLast(indicators.adx),
       atr: this.safeLast(indicators.atr),
+      atrMean: this.safeMean(indicators.atr),
       ema20: this.safeLast(indicators.ema20),
       ema50: this.safeLast(indicators.ema50),
       ema200: this.safeLast(indicators.ema200),
@@ -46,7 +47,7 @@ class MarketRegimeClassifier {
     };
 
     // --------------------------------------------------
-    // 🔹 Classification Rules
+    // 🔹 Classification Logic
     // --------------------------------------------------
     let regime = "UNKNOWN";
     let subtype = "NONE";
@@ -54,61 +55,66 @@ class MarketRegimeClassifier {
     let strategyRecommendation = "NONE";
     let riskLevel = "LOW";
 
+    // 📌 TRENDING detection
     if (latest.adx > 25 && latest.ema20 > latest.ema50 && latest.ema50 > latest.ema200) {
       regime = "TRENDING";
-      subtype = latest.close > latest.ema20 ? "UPTREND" : "DOWNTREND";
-      confidence = 0.8;
+      subtype = latest.adx > 35 ? "STRONG_UPTREND" : "WEAK_UPTREND";
+      confidence = latest.adx > 35 ? 0.9 : 0.75;
       strategyRecommendation = "FOLLOW_TREND";
       riskLevel = "MEDIUM";
-    } else if (latest.adx < 20 && latest.bbUpper && latest.bbLower) {
+
+      if (latest.close < latest.ema20) subtype = "DOWNTREND"; // fallback
+    }
+
+    // 📌 RANGING detection
+    else if (latest.adx < 20 && latest.bbUpper && latest.bbLower) {
       const bbWidth = latest.bbUpper - latest.bbLower;
       if (bbWidth < latest.close * 0.01) {
         regime = "RANGING";
-        subtype = "CONSOLIDATION";
-        confidence = 0.7;
+        subtype = bbWidth < latest.close * 0.005 ? "LOW_VOL_CONSOLIDATION" : "HIGH_VOL_CONSOLIDATION";
+        confidence = 0.65 + (0.01 * (20 - latest.adx)); // weaker ADX → higher confidence of ranging
         strategyRecommendation = "MEAN_REVERSION";
         riskLevel = "LOW";
       }
-    } else if (latest.close > latest.bbUpper && latest.volume > latest.avgVolume * 1.5) {
+    }
+
+    // 📌 BREAKOUT detection
+    else if (latest.close > latest.bbUpper && latest.volume > latest.avgVolume * 1.5) {
       regime = "BREAKOUT";
       subtype = "BULLISH_BREAKOUT";
-      confidence = 0.75;
+      confidence = 0.75 + (latest.adx > 30 ? 0.1 : 0); // ADX rising → stronger confidence
       strategyRecommendation = "MOMENTUM";
       riskLevel = "HIGH";
     } else if (latest.close < latest.bbLower && latest.volume > latest.avgVolume * 1.5) {
       regime = "BREAKOUT";
       subtype = "BEARISH_BREAKOUT";
-      confidence = 0.75;
+      confidence = 0.75 + (latest.adx > 30 ? 0.1 : 0);
       strategyRecommendation = "MOMENTUM";
       riskLevel = "HIGH";
-    } else if (latest.atr > this.safeMean(indicators.atr) * 1.3) {
+    }
+
+    // 📌 VOLATILE detection
+    else if (latest.atr > latest.atrMean * 1.3) {
       regime = "VOLATILE";
-      subtype = "CHAOTIC";
-      confidence = 0.6;
+      subtype = latest.atr > latest.atrMean * 2 ? "SPIKE" : "CHAOTIC";
+      confidence = latest.atr > latest.atrMean * 2 ? 0.85 : 0.65;
       strategyRecommendation = "REDUCE_POSITION";
       riskLevel = "HIGH";
     }
 
     // --------------------------------------------------
-    // 🔹 Debug Mode: Print why regime is UNKNOWN
+    // 🔹 Debug Mode
     // --------------------------------------------------
     if (debug && regime === "UNKNOWN") {
       console.log("\n⚠️ DEBUG MODE: Regime classified as UNKNOWN");
       console.log("👉 Latest Indicator Snapshot:");
       console.table(latest);
-
-      console.log("👉 Condition Checks:");
-      console.log(`ADX > 25 && EMA alignment? ${latest.adx > 25 && latest.ema20 > latest.ema50 && latest.ema50 > latest.ema200}`);
-      console.log(`ADX < 20 && BB squeeze? ${latest.adx < 20 && latest.bbUpper && latest.bbLower}`);
-      console.log(`Close > BBUpper && Volume spike? ${latest.close > latest.bbUpper && latest.volume > latest.avgVolume * 1.5}`);
-      console.log(`Close < BBLower && Volume spike? ${latest.close < latest.bbLower && latest.volume > latest.avgVolume * 1.5}`);
-      console.log(`ATR > 1.3 × mean(ATR)? ${latest.atr > this.safeMean(indicators.atr) * 1.3}`);
     }
 
     return {
       regime,
       subtype,
-      confidence,
+      confidence: Number(confidence.toFixed(2)),
       characteristics: {
         trendStrength: latest.adx,
         volatility: latest.atr,
