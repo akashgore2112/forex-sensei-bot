@@ -3,8 +3,9 @@
 // Goal: Validate feature extraction system on real Phase 1 data
 // ============================================================================
 
-const MTFA = require("../mtfa");   // root me hai mtfa.js
-const FeatureGenerator = require("../feature-engineering/feature-generator"); // ✅ ml-pipeline ke andar
+// test/test-features.js
+const MTFA = require('../mtfa');   // Tumhara existing MTFA analyzer
+const FeatureGenerator = require('../ml-pipeline/feature-engineering/feature-generator');
 
 async function runTest() {
   try {
