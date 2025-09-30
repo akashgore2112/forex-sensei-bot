@@ -42,7 +42,7 @@ class ModelTrainer {
   }
 
   // ==========================================================================
-  // 🌲 Random Forest Classifier (Adapter Applied)
+  // 🌲 Random Forest Classifier
   // ==========================================================================
   async trainRandomForest(dataset, options = {}) {
     console.log("🌲 Training Random Forest Classifier...");
@@ -56,7 +56,7 @@ class ModelTrainer {
       throw new Error("❌ No valid training data for Random Forest");
     }
 
-    // 🔑 Adapter: Convert feature objects → numeric arrays
+    // Adapter → convert feature objects into numeric arrays
     const X = features.map(f => Object.values(f));
     const y = labels;
 
@@ -72,6 +72,10 @@ class ModelTrainer {
   async trainLSTM(dataset, options = {}) {
     console.log("🔮 Training LSTM Price Predictor...");
 
+    if (!dataset.sequences || !dataset.sequences.X || dataset.sequences.X.length === 0) {
+      throw new Error("❌ No valid sequence data for LSTM");
+    }
+
     const lstm = new LSTMPricePredictor(options.lstm || { epochs: 50, batchSize: 32 });
     await lstm.trainModel(dataset.sequences.X, dataset.sequences.Y);
 
@@ -86,7 +90,18 @@ class ModelTrainer {
     console.log("📉 Training Volatility Predictor...");
 
     const vol = new VolatilityPredictor(options.vol || {});
-    await vol.trainModel(dataset.train.features, dataset.train.labels);
+
+    const features = dataset.train.features;
+    const labels = dataset.train.labels;
+
+    if (!features || !labels || features.length === 0 || labels.length === 0) {
+      throw new Error("❌ No valid training data for Volatility Predictor");
+    }
+
+    const X = features.map(f => Object.values(f));
+    const y = labels;
+
+    await vol.trainModel({ X, y });
 
     const modelData = vol.saveModel ? vol.saveModel() : { message: "No saveModel implemented" };
     return this._saveModel("volatility", modelData, options);
@@ -99,7 +114,18 @@ class ModelTrainer {
     console.log("📊 Training Market Regime Classifier...");
 
     const regime = new MarketRegimeClassifier(options.regime || {});
-    await regime.trainModel(dataset.train.features, dataset.train.labels);
+
+    const features = dataset.train.features;
+    const labels = dataset.train.labels;
+
+    if (!features || !labels || features.length === 0 || labels.length === 0) {
+      throw new Error("❌ No valid training data for Market Regime Classifier");
+    }
+
+    const X = features.map(f => Object.values(f));
+    const y = labels;
+
+    await regime.trainModel({ X, y });
 
     const modelData = regime.saveModel ? regime.saveModel() : { message: "No saveModel implemented" };
     return this._saveModel("regime", modelData, options);
