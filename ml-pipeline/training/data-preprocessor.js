@@ -149,7 +149,7 @@ class DataPreprocessor {
   preprocess(candles, indicators, featureGenerator) {
     console.log("\n🚀 Starting data preprocessing pipeline...\n");
 
-    const { candles: alignedCandles, features } = this.generateFeatures(candles, indicators, featureGenerator);
+    const { candles: alignedCandles, features } = this.generateAllFeatures(candles, indicators, featureGenerator);
 
     console.log(`📊 Aligned data: ${alignedCandles.length} candles, ${features.length} feature vectors`);
 
