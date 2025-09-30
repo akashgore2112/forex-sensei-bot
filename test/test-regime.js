@@ -38,17 +38,25 @@ async function processCandles(pair = "EUR/USD") {
 async function runMarketRegime(candles, indicators) {
   const classifier = new MarketRegimeClassifier();
 
-  // 🔹 Debug flag enabled here
+  // Debug flag enabled here
   const result = classifier.classifyRegime(candles, indicators, true);
 
   console.log("\n📌 MARKET REGIME FORECAST:");
-  console.log("──────────────────────────────");
-  console.log(JSON.stringify(result, null, 2));
+  console.log("═══════════════════════════════");
+  console.log(` Regime:      ${result.regime}`);
+  console.log(` Subtype:     ${result.subtype}`);
+  console.log(` Confidence:  ${result.confidence}`);
+  console.log(` Strategy:    ${result.strategyRecommendation}`);
+  console.log(` Risk Level:  ${result.riskLevel}`);
+  console.log("────────────────────────────────");
 
-  // Extra debug info
-  console.log("──────────────────────────────");
-  console.log(`📊 Usable candles for regime detection: ${candles.length}`);
-  console.log("──────────────────────────────");
+  console.log(" Characteristics:");
+  console.table(result.characteristics);
+
+  console.log(" Metrics:");
+  console.table(result.metrics);
+
+  console.log("═══════════════════════════════\n");
 
   return result;
 }
@@ -60,7 +68,6 @@ async function runVolatility(candles) {
   const predictor = new VolatilityPredictor();
   const latest = candles[candles.length - 1] || {};
 
-  // Safe fallback
   if (!latest || !latest.atr) {
     console.warn("⚠️ Skipping volatility forecast: latest candle missing ATR");
     return {};
@@ -69,9 +76,9 @@ async function runVolatility(candles) {
   const result = predictor.predict(candles, latest);
 
   console.log("\n📌 VOLATILITY FORECAST:");
-  console.log("──────────────────────────────");
+  console.log("═══════════════════════════════");
   console.log(JSON.stringify(result, null, 2));
-  console.log("──────────────────────────────");
+  console.log("═══════════════════════════════\n");
 
   return result;
 }
@@ -85,10 +92,7 @@ async function runAnalysis() {
 
     const { candles, indicators } = await processCandles("EUR/USD");
 
-    // Run Regime Classification (with debug)
     await runMarketRegime(candles, indicators);
-
-    // Run Volatility Prediction
     await runVolatility(candles);
 
     console.log("\n🎯 Integrated Market Analysis Completed!");
