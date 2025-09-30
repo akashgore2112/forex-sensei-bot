@@ -3,7 +3,7 @@
 // Goal: Validate feature extraction system on real Phase 1 data
 // ============================================================================
 
-// test/test-features.js
+// test/test-feature.js
 const MTFA = require('../mtfa');   // Tumhara existing MTFA analyzer
 const FeatureGenerator = require('../ml-pipeline/feature-engineering/feature-generator');
 
@@ -23,17 +23,23 @@ async function runTest() {
     // Indicators from Phase 1
     const indicators = mtfaData.daily;
 
+    // 🔍 Debug Print Indicators
+    console.log("\n🔍 Raw Indicators from MTFA (Daily):");
+    console.log(JSON.stringify(indicators, null, 2));
+
     // Step 2: Generate features
     const generator = new FeatureGenerator();
     const features = generator.generateAllFeatures(candles, indicators);
 
     // Step 3: Print results
-    console.log("✅ Generated Features (Real Data):");
+    console.log("\n✅ Generated Features (Real Data):");
     console.log(JSON.stringify(features, null, 2));
 
     // Step 4: Basic validation
     console.log("\n🔍 Validation:");
-    const hasNaN = Object.values(features).some(v => v === null || v === undefined || isNaN(v));
+    const hasNaN = Object.values(features).some(
+      v => v === null || v === undefined || isNaN(v)
+    );
     console.log("NaN/Null check:", hasNaN ? "❌ FAIL" : "✅ PASS");
 
     console.log("Total feature count:", Object.keys(features).length);
