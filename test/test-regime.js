@@ -62,24 +62,26 @@ async function runMarketRegime(candles, indicators) {
 }
 
 // ============================================================================
-// 📌 Run Volatility Predictor  ✅ FIXED (ATR taken from indicators)
+// 📌 Run Volatility Predictor ✅ FIXED (ATR merged into candles)
 // ============================================================================
 async function runVolatility(candles, indicators) {
   const predictor = new VolatilityPredictor();
 
-  // 🔹 Use ATR from indicators (not candles)
-  const latestATR = indicators.atr?.[indicators.atr.length - 1] || 0;
-  if (!latestATR) {
+  // 🔹 Attach ATR values to each candle
+  const atrSeries = indicators.atr || [];
+  const enrichedCandles = candles.map((c, i) => ({
+    ...c,
+    atr: atrSeries[i] || 0
+  }));
+
+  // 🔹 Latest candle with ATR
+  const latest = enrichedCandles[enrichedCandles.length - 1];
+  if (!latest.atr) {
     console.warn("⚠️ Skipping volatility forecast: ATR not available");
     return {};
   }
 
-  const latest = {
-    ...candles[candles.length - 1],
-    atr: latestATR
-  };
-
-  const result = predictor.predict(candles, latest);
+  const result = predictor.predict(enrichedCandles);
 
   console.log("\n📌 VOLATILITY FORECAST:");
   console.log("═══════════════════════════════");
