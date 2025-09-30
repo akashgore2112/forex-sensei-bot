@@ -1,122 +1,184 @@
 // ============================================================================
-// 📊 Integrated Market Analysis Test (Phase 2 - Step 1.4)
-// Includes: Market Regime Classification + Volatility Forecast
+// 📊 Market Regime Classifier Test (Production-Ready)
+// Phase 2 - Step 1.4
+// Focused solely on regime classification
 // ============================================================================
 
 const MTFA = require("../mtfa");
 const SwingIndicators = require("../swing-indicators");
 const MarketRegimeClassifier = require("../ml-pipeline/models/market-regime-classifier");
-const VolatilityPredictor = require("../ml-pipeline/models/volatility-predictor");
 
 // ============================================================================
-// 📌 Helper: Process candles + indicators
+// 📌 Main Test Runner
 // ============================================================================
-async function processCandles(pair = "EUR/USD") {
-  console.log(`📊 Running Multi-Timeframe Analysis for ${pair}...`);
-  const mtfaResult = await MTFA.analyze(pair);
+async function runRegimeTest() {
+  console.log("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
+  console.log("   MARKET REGIME CLASSIFIER TEST");
+  console.log("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n");
 
-  if (!mtfaResult || !mtfaResult.dailyCandles?.length) {
-    throw new Error("❌ MTFA did not return daily candles. Check Phase 1 system.");
-  }
-
-  const candles = mtfaResult.dailyCandles;
-  console.log("─────────────────────────────────────────────");
-  console.log(`📊 MTFA returned total candles: ${candles.length}`);
-
-  console.log("📈 Calculating indicators...");
-  const indicators = await SwingIndicators.calculateAll(candles);
-
-  console.log("✅ Indicators calculated successfully");
-  console.log("─────────────────────────────────────────────\n");
-
-  // 🔹 Debug ATR
-  console.log(`🔍 ATR Debug → Count: ${indicators.atr?.length || 0}`);
-  console.log(`🔍 ATR Debug → Last Value: ${indicators.atr?.[indicators.atr?.length - 1] || "N/A"}`);
-
-  return { candles, indicators };
-}
-
-// ============================================================================
-// 📌 Run Market Regime Classifier
-// ============================================================================
-async function runMarketRegime(candles, indicators) {
-  const classifier = new MarketRegimeClassifier();
-
-  // Debug flag enabled here
-  const result = classifier.classifyRegime(candles, indicators, true);
-
-  console.log("\n📌 MARKET REGIME FORECAST:");
-  console.log("═══════════════════════════════");
-  console.log(` Regime:      ${result.regime}`);
-  console.log(` Subtype:     ${result.subtype}`);
-  console.log(` Confidence:  ${result.confidence}`);
-  console.log(` Strategy:    ${result.strategyRecommendation}`);
-  console.log(` Risk Level:  ${result.riskLevel}`);
-  console.log("────────────────────────────────");
-
-  console.log(" Characteristics:");
-  console.table(result.characteristics);
-
-  console.log(" Metrics:");
-  console.table(result.metrics);
-
-  console.log("═══════════════════════════════\n");
-
-  return result;
-}
-
-// ============================================================================
-// 📌 Run Volatility Predictor  ✅ FIXED (inject ATR into candles)
-// ============================================================================
-async function runVolatility(candles, indicators) {
-  const predictor = new VolatilityPredictor();
-
-  // ATR array from indicators
-  const atrValues = indicators.atr || [];
-  if (atrValues.length === 0) {
-    console.warn("⚠️ Skipping volatility forecast: ATR not available");
-    return {};
-  }
-
-  // 🔹 Merge ATR values into each candle
-  const candlesWithATR = candles.map((c, i) => ({
-    ...c,
-    atr: atrValues[i] || 0
-  }));
-
-  // Run predictor with enriched candles
-  const result = predictor.predict(candlesWithATR);
-
-  console.log("\n📌 VOLATILITY FORECAST:");
-  console.log("═══════════════════════════════");
-  console.log(JSON.stringify(result, null, 2));
-  console.log("═══════════════════════════════\n");
-
-  return result;
-}
-
-// ============================================================================
-// 📌 Main Runner
-// ============================================================================
-async function runAnalysis() {
   try {
-    console.log("🚀 Starting Integrated Market Analysis...\n");
+    // Step 1: Fetch market data
+    console.log("📊 Fetching MTFA data for EUR/USD...");
+    const mtfaResult = await MTFA.analyze("EUR/USD");
 
-    const { candles, indicators } = await processCandles("EUR/USD");
+    if (!mtfaResult || !mtfaResult.dailyCandles?.length) {
+      throw new Error("❌ MTFA did not return daily candles");
+    }
 
-    await runMarketRegime(candles, indicators);
-    await runVolatility(candles, indicators);
+    const candles = mtfaResult.dailyCandles;
+    console.log(`✅ Got ${candles.length} daily candles\n`);
 
-    console.log("\n🎯 Integrated Market Analysis Completed!");
-    console.log("═════════════════════════════════════════");
+    // Step 2: Calculate indicators
+    console.log("📈 Calculating indicators...");
+    const indicators = await SwingIndicators.calculateAll(candles);
+    console.log("✅ Indicators calculated successfully\n");
+
+    // Step 3: Classify market regime
+    console.log("⚡ Classifying market regime...\n");
+    
+    const classifier = new MarketRegimeClassifier();
+    const result = classifier.classifyRegime(candles, indicators);
+
+    // Step 4: Display results
+    displayResults(result);
+
+    console.log("\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
+    console.log("✅ Market Regime Test Completed Successfully!");
+    console.log("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n");
+
+    return { success: true, result };
+
   } catch (err) {
-    console.error("\n❌ FATAL ERROR ❌");
-    console.error(err.message);
-    process.exit(1);
+    console.error("\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
+    console.error("❌ ERROR:");
+    console.error(`   ${err.message}`);
+    console.error("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n");
+    console.error(err.stack);
+    return { success: false, error: err.message };
   }
+}
+
+// ============================================================================
+// 📌 Display Results
+// ============================================================================
+function displayResults(result) {
+  console.log("═══════════════════════════════════════════");
+  console.log("        MARKET REGIME CLASSIFICATION");
+  console.log("═══════════════════════════════════════════\n");
+
+  console.log("📊 REGIME IDENTIFICATION:");
+  console.log("───────────────────────────────────────────");
+  console.log(`   Regime:      ${result.regime}`);
+  console.log(`   Subtype:     ${result.subtype}`);
+  console.log(`   Confidence:  ${(result.confidence * 100).toFixed(1)}%`);
+  console.log();
+
+  console.log("🎯 TRADING RECOMMENDATIONS:");
+  console.log("───────────────────────────────────────────");
+  console.log(`   Strategy:    ${result.strategyRecommendation}`);
+  console.log(`   Risk Level:  ${result.riskLevel}`);
+  console.log();
+
+  console.log("📈 MARKET CHARACTERISTICS:");
+  console.log("───────────────────────────────────────────");
+  Object.entries(result.characteristics).forEach(([key, value]) => {
+    const label = formatLabel(key);
+    console.log(`   ${label}: ${value}`);
+  });
+  console.log();
+
+  console.log("🔍 TECHNICAL METRICS:");
+  console.log("───────────────────────────────────────────");
+  Object.entries(result.metrics).forEach(([key, value]) => {
+    const label = formatLabel(key);
+    const formattedValue = typeof value === 'number' 
+      ? value.toFixed(2) 
+      : value;
+    console.log(`   ${label}: ${formattedValue}`);
+  });
+  console.log();
+
+  console.log("═══════════════════════════════════════════\n");
+
+  // Interpretation guide
+  displayInterpretation(result);
+}
+
+// ============================================================================
+// 📌 Display Interpretation
+// ============================================================================
+function displayInterpretation(result) {
+  console.log("💡 INTERPRETATION:");
+  console.log("───────────────────────────────────────────");
+
+  switch (result.regime) {
+    case "TRENDING":
+      console.log("   The market is showing clear directional movement.");
+      console.log(`   ${result.subtype.includes('UP') ? 'Bullish' : 'Bearish'} momentum is strong.`);
+      console.log("   ✓ Trend-following strategies recommended");
+      console.log("   ✓ Look for pullback entries in trend direction");
+      break;
+
+    case "RANGING":
+      console.log("   The market is consolidating in a range.");
+      console.log("   Price is oscillating between support/resistance.");
+      console.log("   ✓ Mean-reversion strategies recommended");
+      console.log("   ✓ Buy support, sell resistance");
+      break;
+
+    case "BREAKOUT":
+      console.log("   The market is breaking out of consolidation.");
+      console.log(`   ${result.subtype.includes('BULLISH') ? 'Upward' : 'Downward'} breakout in progress.`);
+      console.log("   ✓ Momentum plays recommended");
+      console.log("   ⚠️ Wait for volume confirmation");
+      break;
+
+    case "VOLATILE":
+      console.log("   The market is experiencing high volatility.");
+      console.log("   Price movements are erratic and unpredictable.");
+      console.log("   ⚠️ Reduce position sizes");
+      console.log("   ⚠️ Widen stop losses or avoid trading");
+      break;
+
+    case "TRANSITIONAL":
+      console.log("   The market is in transition between regimes.");
+      console.log("   Direction is unclear - wait for clarity.");
+      console.log("   ⏸️ Stay on sidelines");
+      console.log("   ⏸️ Watch for regime confirmation");
+      break;
+  }
+
+  console.log("───────────────────────────────────────────\n");
+
+  // Risk warning based on confidence
+  if (result.confidence < 0.6) {
+    console.log("⚠️ WARNING: Low confidence classification");
+    console.log("   Consider waiting for clearer market conditions\n");
+  }
+}
+
+// ============================================================================
+// 📌 Utility Functions
+// ============================================================================
+function formatLabel(key) {
+  return key
+    .replace(/([A-Z])/g, ' $1')
+    .replace(/^./, str => str.toUpperCase())
+    .padEnd(20);
 }
 
 // ============================================================================
 // MAIN EXECUTION
 // ============================================================================
-runAnalysis();
+if (require.main === module) {
+  runRegimeTest()
+    .then(result => {
+      process.exit(result.success ? 0 : 1);
+    })
+    .catch(err => {
+      console.error("Fatal error:", err);
+      process.exit(1);
+    });
+}
+
+module.exports = runRegimeTest;
