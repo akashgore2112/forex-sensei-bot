@@ -31,40 +31,38 @@ class DataPreprocessor {
   }
 
   // ==========================================================================
-  // 🔄 Feature Adapter (FIXED ALIGNMENT)
+  // 🔄 Feature Adapter (UPDATED)
   // ==========================================================================
   adaptFeatures(candles, featureGenerator, indicators) {
-  const history = [];
-  const alignedCandles = [];
+    const history = [];
+    const alignedCandles = [];
 
-  for (let i = 0; i < candles.length; i++) {
-    try {
-      const candleSlice = candles.slice(0, i + 1);
-      const indicatorSlice = {};
-      for (const key of Object.keys(indicators)) {
-        indicatorSlice[key] = Array.isArray(indicators[key])
-          ? indicators[key].slice(0, i + 1)
-          : indicators[key];
+    for (let i = 0; i < candles.length; i++) {
+      try {
+        const candleSlice = candles.slice(0, i + 1);
+        const indicatorSlice = {};
+        for (const key of Object.keys(indicators)) {
+          indicatorSlice[key] = Array.isArray(indicators[key])
+            ? indicators[key].slice(0, i + 1)
+            : indicators[key];
+        }
+
+        const features = featureGenerator.generateAllFeatures(candleSlice, indicatorSlice);
+
+        // ✅ Only push valid features (skip <100 candles)
+        if (Object.keys(features).length > 0) {
+          history.push(features);
+          alignedCandles.push(candles[i]);
+        }
+      } catch (err) {
+        console.warn(`⚠️ Skipping feature generation at index ${i}: ${err.message}`);
       }
-
-      const features = featureGenerator.generateAllFeatures(candleSlice, indicatorSlice);
-
-      // ✅ Only push if features are valid (candles >= 100)
-      if (Object.keys(features).length > 0) {
-        history.push(features);
-        alignedCandles.push(candles[i]); // keep same index
-      }
-    } catch (err) {
-      console.warn(`⚠️ Skipping at index ${i}: ${err.message}`);
     }
+
+    // ✅ Return both aligned candles and features
+    return { candles: alignedCandles, features: history };
   }
-
-  return { candles: alignedCandles, features: history };
-}
-
-    return { features, candles: alignedCandles };
-  }
-
+  
   // ==========================================================================
   // 🧮 Normalization
   // ==========================================================================
