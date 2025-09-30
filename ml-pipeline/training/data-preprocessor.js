@@ -1,132 +1,159 @@
-// ml-pipeline/training/data-preprocessor.js
-// 🔄 Data Preprocessor for LSTM - FIXED VERSION
+// ============================================================================
+// 📊 Data Preprocessor (Phase 2 - Step 8.1)
+// Role: Convert raw MTFA + Feature Engineering output into ML-ready datasets
+// Author: Forex ML Pipeline
+// ============================================================================
 
-const tf = require("@tensorflow/tfjs-node");
+const math = require("mathjs");
 
 class DataPreprocessor {
-  constructor(lookback = 60, horizon = 5) {
-    this.lookback = lookback;
-    this.horizon = horizon;
+  constructor(config = {}) {
+    this.lookback = config.lookback || 60; // for LSTM sequences
+    this.predictionHorizon = config.predictionHorizon || 5; // for labels
+    this.normalizationMethod = config.normalization || "zscore"; // default for LSTM
+    this.splitRatio = config.splitRatio || { train: 0.7, val: 0.15, test: 0.15 };
   }
 
-  /**
-   * Preprocess MTFA output into training dataset
-   * @param {Array} mtfaData - Array of daily MTFA candles with indicators
-   * Expected keys: { close, ema20, rsi, macd, atr } ✅ FIXED: rsi (not rsi14)
-   */
-  createSequences(mtfaData) {
-    const features = [];
-    const targets = [];
-
-    // Validate minimum data length
-    const minDataRequired = this.lookback + this.horizon;
-    if (mtfaData.length < minDataRequired) {
-      throw new Error(
-        `❌ Insufficient data: need ${minDataRequired}, got ${mtfaData.length}`
-      );
-    }
-
-    for (let i = this.lookback; i < mtfaData.length - this.horizon; i++) {
-      // 🔹 Build feature window (last N days)
-      const featureWindow = [];
-      let validWindow = true;
-
-      for (let j = i - this.lookback; j < i; j++) {
-        const dp = {
-          close: mtfaData[j].close ?? 0,
-          ema20: mtfaData[j].ema20 ?? 0,
-          rsi: mtfaData[j].rsi ?? 0,      // ✅ FIXED: rsi (consistent naming)
-          macd: mtfaData[j].macd ?? 0,     // ✅ FIXED: handle both object and number
-          atr: mtfaData[j].atr ?? 0,
-        };
-
-        // ✅ Validate all features are valid numbers
-        const values = Object.values(dp);
-        if (values.some(v => v === undefined || isNaN(v) || !isFinite(v))) {
-          console.warn(`⚠️ Invalid feature data at index ${j}:`, dp);
-          validWindow = false;
-          break;
-        }
-
-        featureWindow.push([
-          dp.close,
-          dp.ema20,
-          dp.rsi,
-          dp.macd,
-          dp.atr,
-        ]);
-      }
-
-      // Skip this sequence if any invalid data found
-      if (!validWindow) continue;
-
-      features.push(featureWindow);
-
-      // 🔹 Build target window (next horizon closes)
-      const targetWindow = [];
-      let validTarget = true;
-
-      for (let k = i; k < i + this.horizon; k++) {
-        const closeVal = mtfaData[k].close ?? 0;
-        if (isNaN(closeVal) || !isFinite(closeVal)) {
-          console.warn(`⚠️ Invalid target close at index ${k}:`, closeVal);
-          validTarget = false;
-          break;
-        }
-        targetWindow.push(closeVal);
-      }
-
-      if (!validTarget) {
-        features.pop(); // Remove last added feature window
-        continue;
-      }
-
-      targets.push(targetWindow);
-    }
-
-    console.log(`📊 Sequences created → Features: ${features.length}, Targets: ${targets.length}`);
-
-    if (!features.length || !targets.length) {
-      throw new Error("❌ No valid sequences generated. Check MTFA data quality.");
-    }
-
-    // ✅ Convert arrays → tensors with proper shape validation
-    try {
-      const featureTensor = tf.tensor3d(features, [features.length, this.lookback, 5]);
-      const targetTensor = tf.tensor2d(targets, [targets.length, this.horizon]);
-      
-      console.log(`✅ Tensor shapes → Features: ${featureTensor.shape}, Targets: ${targetTensor.shape}`);
-      
-      return { features: featureTensor, targets: targetTensor };
-    } catch (err) {
-      console.error("❌ Tensor conversion error:", err.message);
-      console.error("Sample feature window:", features[0]);
-      console.error("Sample target window:", targets[0]);
-      throw err;
-    }
+  // ==========================================================================
+  // 🛠️ Utility
+  // ==========================================================================
+  safe(value, fallback = 0) {
+    return value !== undefined && value !== null && !isNaN(value) ? value : fallback;
   }
 
-  /**
-   * Split data into train/test sets
-   * @param {Object} sequences - {features, targets} tensors
-   * @param {number} splitRatio - train split ratio (default 0.8)
-   */
-  trainTestSplit(sequences, splitRatio = 0.8) {
-    const { features, targets } = sequences;
-    const totalSamples = features.shape[0];
-    const trainSize = Math.floor(totalSamples * splitRatio);
+  minMaxScale(value, min, max) {
+    if (max === min) return 0.5;
+    return (value - min) / (max - min);
+  }
 
-    const trainFeatures = features.slice([0, 0, 0], [trainSize, -1, -1]);
-    const trainTargets = targets.slice([0, 0], [trainSize, -1]);
-    
-    const testFeatures = features.slice([trainSize, 0, 0], [-1, -1, -1]);
-    const testTargets = targets.slice([trainSize, 0], [-1, -1]);
+  zScoreScale(value, mean, std) {
+    return std === 0 ? 0 : (value - mean) / std;
+  }
 
-    console.log(`📊 Train/Test Split: ${trainSize}/${totalSamples - trainSize}`);
+  // ==========================================================================
+  // 🧮 Normalization
+  // ==========================================================================
+  normalize(featuresArray, method = this.normalizationMethod) {
+    const normalized = [];
+    const keys = Object.keys(featuresArray[0]);
+
+    for (const key of keys) {
+      const series = featuresArray.map(f => this.safe(f[key]));
+      const min = math.min(series);
+      const max = math.max(series);
+      const mean = math.mean(series);
+      const std = math.std(series);
+
+      for (let i = 0; i < featuresArray.length; i++) {
+        if (!normalized[i]) normalized[i] = {};
+        const value = series[i];
+
+        normalized[i][key] =
+          method === "minmax"
+            ? this.minMaxScale(value, min, max)
+            : this.zScoreScale(value, mean, std);
+      }
+    }
+
+    return normalized;
+  }
+
+  // ==========================================================================
+  // 🏷️ Label Generation
+  // ==========================================================================
+  generateLabels(candles) {
+    const labels = [];
+
+    for (let i = 0; i < candles.length - this.predictionHorizon; i++) {
+      const currentClose = candles[i].close;
+      const futureClose = candles[i + this.predictionHorizon].close;
+      const change = (futureClose - currentClose) / currentClose;
+
+      let label = "HOLD";
+      if (change > 0.01) label = "BUY";
+      else if (change < -0.01) label = "SELL";
+
+      labels.push(label);
+    }
+
+    return labels;
+  }
+
+  // ==========================================================================
+  // 📐 Dataset Split
+  // ==========================================================================
+  splitData(features, labels) {
+    const total = features.length;
+    const trainEnd = Math.floor(total * this.splitRatio.train);
+    const valEnd = trainEnd + Math.floor(total * this.splitRatio.val);
 
     return {
-      train: { features: trainFeatures, targets: trainTargets },
-      test: { features: testFeatures, targets: testTargets }
+      train: {
+        features: features.slice(0, trainEnd),
+        labels: labels.slice(0, trainEnd),
+      },
+      val: {
+        features: features.slice(trainEnd, valEnd),
+        labels: labels.slice(trainEnd, valEnd),
+      },
+      test: {
+        features: features.slice(valEnd),
+        labels: labels.slice(valEnd),
+      },
+      metadata: {
+        totalSamples: total,
+        trainSamples: trainEnd,
+        valSamples: valEnd - trainEnd,
+        testSamples: total - valEnd,
+        splitRatio: this.splitRatio,
+      },
+    };
+  }
+
+  // ==========================================================================
+  // 🔗 LSTM Data Sequencing
+  // ==========================================================================
+  createSequences(features, labels) {
+    const X = [];
+    const Y = [];
+
+    for (let i = this.lookback; i < features.length - this.predictionHorizon; i++) {
+      const seq = features.slice(i - this.lookback, i);
+      X.push(seq);
+
+      // Encode labels (BUY/SELL/HOLD → one-hot for classification)
+      const label = labels[i];
+      if (label === "BUY") Y.push([1, 0, 0]);
+      else if (label === "SELL") Y.push([0, 1, 0]);
+      else Y.push([0, 0, 1]);
+    }
+
+    return { X, Y };
+  }
+
+  // ==========================================================================
+  // 🚀 Main Preprocessing Pipeline
+  // ==========================================================================
+  preprocess(candles, features) {
+    if (!candles || !features || candles.length !== features.length) {
+      throw new Error("❌ Invalid input to DataPreprocessor: candles and features mismatch");
+    }
+
+    // Step 1: Normalize features
+    const normalized = this.normalize(features, this.normalizationMethod);
+
+    // Step 2: Generate labels
+    const labels = this.generateLabels(candles);
+
+    // Step 3: Split data
+    const split = this.splitData(normalized, labels);
+
+    // Step 4: For LSTM create sequences
+    const sequences = this.createSequences(normalized, labels);
+
+    return {
+      ...split,
+      sequences,
     };
   }
 }
