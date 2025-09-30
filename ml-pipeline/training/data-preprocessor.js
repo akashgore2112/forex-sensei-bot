@@ -31,43 +31,44 @@ class DataPreprocessor {
   }
 
   // ==========================================================================
-  // 🔄 Feature Adapter (NEW)
+  // 🔄 Feature Adapter (FIXED ALIGNMENT)
   // ==========================================================================
   adaptFeatures(candles, featureGenerator, indicators) {
-    /**
-     * Adapter ensures that each candle has a feature vector.
-     * candles: raw OHLCV
-     * indicators: Phase 1 outputs
-     * featureGenerator: Step 7 FeatureGenerator instance
-     */
-    const history = [];
+    const features = [];
+    const alignedCandles = [];
 
     for (let i = 0; i < candles.length; i++) {
       try {
-        // Slice candles/indicators progressively for realistic feature gen
         const candleSlice = candles.slice(0, i + 1);
         const indicatorSlice = {};
+
+        // Progressive slicing of indicators
         for (const key of Object.keys(indicators)) {
           indicatorSlice[key] = Array.isArray(indicators[key])
             ? indicators[key].slice(0, i + 1)
             : indicators[key];
         }
 
-        const features = featureGenerator.generateAllFeatures(candleSlice, indicatorSlice);
-        history.push(features);
+        // Generate features only if enough candles
+        const f = featureGenerator.generateAllFeatures(candleSlice, indicatorSlice);
+
+        features.push(f);
+        alignedCandles.push(candles[i]);
       } catch (err) {
         console.warn(`⚠️ Skipping feature generation at index ${i}: ${err.message}`);
-        history.push({});
+        // 🚨 DO NOT push empty object, skip candle to keep alignment
       }
     }
 
-    return history;
+    return { features, candles: alignedCandles };
   }
 
   // ==========================================================================
   // 🧮 Normalization
   // ==========================================================================
   normalize(featuresArray, method = this.normalizationMethod) {
+    if (!featuresArray || featuresArray.length === 0) return [];
+
     const normalized = [];
     const keys = Object.keys(featuresArray[0]);
 
@@ -170,7 +171,9 @@ class DataPreprocessor {
   // ==========================================================================
   preprocess(candles, features) {
     if (!candles || !features || candles.length !== features.length) {
-      throw new Error("❌ Invalid input to DataPreprocessor: candles and features mismatch");
+      throw new Error(
+        `❌ Invalid input to DataPreprocessor: candles (${candles?.length}) and features (${features?.length}) mismatch`
+      );
     }
 
     // Step 1: Normalize features
