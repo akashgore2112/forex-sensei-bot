@@ -1,14 +1,15 @@
 // test/test-feature.js
-const MTFA = require('../mtfa');   
-const FeatureGenerator = require('../ml-pipeline/feature-engineering/feature-generator');
+const MTFA = require("../mtfa");   // root me hai mtfa.js
+const FeatureGenerator = require("../ml-pipeline/feature-engineering/feature-generator");
 
 async function runTest() {
   try {
     // Step 1: Run MTFA to get real data
-    const mtfaData = await MTFA.analyzeMultipleTimeframes("EUR/USD");
+    const mtfaData = await MTFA.analyze("EUR/USD");   // ✅ correct function call
     
-    const candles = mtfaData.daily.rawData;       // Daily candles (OHLCV)
-    const indicators = mtfaData.daily.indicators; // Indicators (ema, rsi, macd, atr, etc.)
+    // Tumhare mtfa.js me indicators direct return ho rahe hai
+    const candles = mtfaData.dailyCandles;       // ✅ candles from MTFA
+    const indicators = mtfaData.daily;           // ✅ daily indicators
     
     // Step 2: Generate features
     const generator = new FeatureGenerator();
