@@ -1,76 +1,78 @@
 // ============================================================================
-// 🧪 Test Script for Data Preprocessor (Step 8.1)
-// Goal: Verify preprocessing pipeline on MTFA candles + features
+// 🧪 Test - Data Preprocessor (Phase 2 - Step 8.1)
+// Goal: Verify preprocessing pipeline with MTFA + Feature Engineering
 // ============================================================================
 
-const MTFA = require("../mtfa"); // Tumhara Phase 1 analyzer
+const MTFA = require("../mtfa"); // Tumhara existing MTFA analyzer
+const SwingIndicators = require("../swing-indicators");
 const FeatureGenerator = require("../ml-pipeline/feature-engineering/feature-generator");
 const DataPreprocessor = require("../ml-pipeline/training/data-preprocessor");
 
 async function runPreprocessorTest() {
-  console.log("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
-  console.log("   TESTING DATA PREPROCESSOR (Step 8.1)");
-  console.log("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n");
+  console.log("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
+  console.log("   STEP 8.1 - DATA PREPROCESSOR TEST");
+  console.log("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n");
 
   try {
-    // Step 1: Get historical data (Phase 1)
-    console.log("📊 Fetching historical candles...");
+    // Step 1: Fetch MTFA candles
+    console.log("📊 Fetching MTFA data...");
     const mtfaResult = await MTFA.analyze("EUR/USD");
     const candles = mtfaResult.dailyCandles;
+    console.log(`✅ Got ${candles.length} candles\n`);
 
-    console.log(`✅ Got ${candles.length} daily candles\n`);
+    // Step 2: Calculate indicators
+    console.log("📈 Calculating indicators...");
+    const indicators = await SwingIndicators.calculateAll(candles);
+    console.log("✅ Indicators ready\n");
 
-    // Step 2: Generate features from indicators
-    console.log("⚙️ Generating features...");
-    const fg = new FeatureGenerator();
-    const features = fg.generateAllFeatures(candles, mtfaResult.daily);
-
-    // Convert features into array of snapshots (per candle)
-    const featuresArray = candles.map((c, idx) => {
-      return {
-        close: c.close,
-        ema20: mtfaResult.daily.ema20[idx] || 0,
-        rsi: mtfaResult.daily.rsi14[idx] || 0,
-        atr: mtfaResult.daily.atr[idx] || 0,
-        macd: mtfaResult.daily.macd?.macd[idx] || 0,
-      };
-    });
-
-    console.log(`✅ Generated ${featuresArray.length} feature snapshots\n`);
-
-    // Step 3: Run Data Preprocessor
-    console.log("🛠️ Running preprocessing pipeline...");
+    // Step 3: Generate full feature history
+    console.log("⚙️ Generating feature history...");
+    const featureGen = new FeatureGenerator();
     const preprocessor = new DataPreprocessor({
       lookback: 60,
       predictionHorizon: 5,
       normalization: "zscore",
     });
 
-    const dataset = preprocessor.preprocess(candles, featuresArray);
+    const featureHistory = preprocessor.adaptFeatures(candles, featureGen, indicators);
+    console.log(`✅ Generated feature history for ${featureHistory.length} candles\n`);
 
-    // Step 4: Display Results
-    console.log("\n════════════════════════════════════════");
-    console.log("         DATA PREPROCESSOR RESULT");
-    console.log("════════════════════════════════════════\n");
+    // Step 4: Preprocess into ML dataset
+    console.log("🚀 Running preprocessing pipeline...");
+    const dataset = preprocessor.preprocess(candles, featureHistory);
 
-    console.log("📊 Metadata:", dataset.metadata);
-    console.log("\n🔹 Example Feature Vector:", dataset.train.features[0]);
-    console.log("\n🔹 Example Label:", dataset.train.labels[0]);
-    console.log("\n🔹 Example Sequence (LSTM):", dataset.sequences.X[0][0]);
+    // Step 5: Print metadata
+    console.log("\n📊 Dataset Metadata:");
+    console.log(dataset.metadata);
 
-    console.log("\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
-    console.log("✅ Data Preprocessor Test Completed!");
-    console.log("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n");
+    // Step 6: Sample outputs
+    console.log("\n🔍 Sample Normalized Feature Vector:");
+    console.log(dataset.train.features[0]);
 
-    return dataset;
+    console.log("\n🔍 Sample Sequence (LSTM):");
+    console.log(dataset.sequences.X[0].slice(0, 2)); // show first 2 timesteps
+    console.log("Label:", dataset.sequences.Y[0]);
+
+    console.log("\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
+    console.log("✅ Step 8.1 Preprocessor Test Completed!");
+    console.log("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n");
+
+    return { success: true, dataset };
   } catch (err) {
-    console.error("❌ ERROR in Preprocessor Test:", err.message);
+    console.error("\n❌ ERROR in Preprocessor Test:");
+    console.error(`   ${err.message}`);
     console.error(err.stack);
+    return { success: false, error: err.message };
   }
 }
 
 if (require.main === module) {
-  runPreprocessorTest();
+  runPreprocessorTest()
+    .then(result => process.exit(result.success ? 0 : 1))
+    .catch(err => {
+      console.error("Fatal error:", err);
+      process.exit(1);
+    });
 }
 
 module.exports = runPreprocessorTest;
