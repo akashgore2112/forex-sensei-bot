@@ -19,13 +19,14 @@ async function runTest() {
   const generator = new FeatureGenerator();
   const rawFeatures = generator.generateAllFeatures(candles, indicators);
 
-  // Step 2: Apply transformations (✅ FIXED)
+  // Step 2: Apply transformations
   const transformer = new FeatureTransformer();
+  // NOTE: history-based transform, pass array of snapshots
   const transformedFeatures = transformer.transformFeatures([rawFeatures]);
 
-  // Step 3: Add cross features (✅ FIXED)
+  // Step 3: Add cross features
   const cross = new CrossFeatures();
-  const crossFeatures = cross.generate(transformedFeatures);
+  const crossFeatures = cross.generateAllCrossFeatures(transformedFeatures, candles);
 
   // Merge all features
   const allFeatures = { ...rawFeatures, ...transformedFeatures, ...crossFeatures };
