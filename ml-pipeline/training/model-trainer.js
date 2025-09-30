@@ -8,10 +8,11 @@ const fs = require("fs");
 const path = require("path");
 
 // Import Models
-const SwingSignalClassifier = require("../../random-forest-classifier");
-const LSTMPricePredictor = require("../../lstm-predictor");
-const VolatilityPredictor = require("../../volatility-predictor");
-const MarketRegimeClassifier = require("../../market-regime-classifier");
+// Correct paths
+const LSTMPricePredictor = require("../models/lstm-predictor");
+const SwingSignalClassifier = require("../models/random-forest-classifier");
+const VolatilityPredictor = require("../models/volatility-predictor");
+const MarketRegimeClassifier = require("../models/market-regime-classifier");
 
 class ModelTrainer {
   constructor(config = {}) {
