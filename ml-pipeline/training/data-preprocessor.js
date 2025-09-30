@@ -34,31 +34,33 @@ class DataPreprocessor {
   // 🔄 Feature Adapter (FIXED ALIGNMENT)
   // ==========================================================================
   adaptFeatures(candles, featureGenerator, indicators) {
-    const features = [];
-    const alignedCandles = [];
+  const history = [];
+  const alignedCandles = [];
 
-    for (let i = 0; i < candles.length; i++) {
-      try {
-        const candleSlice = candles.slice(0, i + 1);
-        const indicatorSlice = {};
-
-        // Progressive slicing of indicators
-        for (const key of Object.keys(indicators)) {
-          indicatorSlice[key] = Array.isArray(indicators[key])
-            ? indicators[key].slice(0, i + 1)
-            : indicators[key];
-        }
-
-        // Generate features only if enough candles
-        const f = featureGenerator.generateAllFeatures(candleSlice, indicatorSlice);
-
-        features.push(f);
-        alignedCandles.push(candles[i]);
-      } catch (err) {
-        console.warn(`⚠️ Skipping feature generation at index ${i}: ${err.message}`);
-        // 🚨 DO NOT push empty object, skip candle to keep alignment
+  for (let i = 0; i < candles.length; i++) {
+    try {
+      const candleSlice = candles.slice(0, i + 1);
+      const indicatorSlice = {};
+      for (const key of Object.keys(indicators)) {
+        indicatorSlice[key] = Array.isArray(indicators[key])
+          ? indicators[key].slice(0, i + 1)
+          : indicators[key];
       }
+
+      const features = featureGenerator.generateAllFeatures(candleSlice, indicatorSlice);
+
+      // ✅ Only push if features are valid (candles >= 100)
+      if (Object.keys(features).length > 0) {
+        history.push(features);
+        alignedCandles.push(candles[i]); // keep same index
+      }
+    } catch (err) {
+      console.warn(`⚠️ Skipping at index ${i}: ${err.message}`);
     }
+  }
+
+  return { candles: alignedCandles, features: history };
+}
 
     return { features, candles: alignedCandles };
   }
