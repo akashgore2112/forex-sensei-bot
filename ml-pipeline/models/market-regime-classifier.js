@@ -1,79 +1,92 @@
 // ============================================================================
-// 📊 Market Regime Classifier (Phase 2 - Step 1.4)
-// Industry Standard Statistical Approach (ADX, BB, ATR, EMA)
+// 📊 Market Regime Classifier (Statistical Approach)
+// Phase 2 - Step 1.4
+// Added: Warm-up handling + candle usage logging
 // ============================================================================
 
 class MarketRegimeClassifier {
-  constructor() {}
-
-  /**
-   * 📌 Main classification entry point
-   */
   classifyRegime(candles, indicators) {
-    if (!candles || candles.length < 50) {
-      throw new Error("❌ Not enough candles for regime classification");
+    if (!candles || candles.length === 0) {
+      throw new Error("❌ No candle data provided");
     }
 
-    const lastIdx = candles.length - 1;
+    // --------------------------------------------------
+    // 🔹 Calculate usable candles (warm-up drop)
+    // --------------------------------------------------
+    const totalCandles = candles.length;
 
-    // Extract latest values
-    const price = candles[lastIdx].close;
-    const adx = indicators.adx?.[lastIdx] || 0;
-    const atr = indicators.atr?.[lastIdx] || 0;
-    const bbWidth = this.calculateBBWidth(indicators, lastIdx);
-    const ema20 = indicators.ema20?.[lastIdx] || price;
-    const ema50 = indicators.ema50?.[lastIdx] || price;
-    const ema200 = indicators.ema200?.[lastIdx] || price;
-    const volume = candles[lastIdx].volume || 0;
-    const avgVolume =
-      lastIdx >= 20
-        ? candles.slice(lastIdx - 20, lastIdx).reduce((s, c) => s + (c.volume || 0), 0) / 20
-        : volume;
+    // warm-up = max lookback of indicators
+    const warmup = Math.max(200, 20, 14); // EMA200, BBANDS(20), ADX/ATR(14)
+    const usableCandles = Math.max(0, totalCandles - warmup);
 
-    // Classification variables
+    console.log("───────────────────────────────────────");
+    console.log(`📊 Total candles received: ${totalCandles}`);
+    console.log(`⚠️ Warm-up candles dropped: ${warmup}`);
+    console.log(`✅ Usable candles for regime detection: ${usableCandles}`);
+    console.log("───────────────────────────────────────");
+
+    if (usableCandles <= 0) {
+      throw new Error("❌ Not enough data for regime classification");
+    }
+
+    // --------------------------------------------------
+    // 🔹 Extract latest indicator values (safe fallback)
+    // --------------------------------------------------
+    const latest = {
+      close: candles[totalCandles - 1]?.close ?? 0,
+      volume: candles[totalCandles - 1]?.volume ?? 0,
+      avgVolume: this.safeArray(indicators.volumeTrend)?.slice(-20).reduce((a, b) => a + b, 0) / 20 || 0,
+      adx: this.safeLast(indicators.adx),
+      atr: this.safeLast(indicators.atr),
+      ema20: this.safeLast(indicators.ema20),
+      ema50: this.safeLast(indicators.ema50),
+      ema200: this.safeLast(indicators.ema200),
+      bbUpper: this.safeLast(indicators.bollinger?.upper),
+      bbLower: this.safeLast(indicators.bollinger?.lower),
+    };
+
+    // --------------------------------------------------
+    // 🔹 Classification Rules
+    // --------------------------------------------------
     let regime = "UNKNOWN";
-    let subtype = null;
+    let subtype = "NONE";
     let confidence = 0.5;
-    let strategy = "NONE";
+    let strategyRecommendation = "NONE";
     let riskLevel = "LOW";
 
-    // --- TRENDING ---
-    if (adx > 25 && ema20 > ema50 && ema50 > ema200) {
+    if (latest.adx > 25 && latest.ema20 > latest.ema50 && latest.ema50 > latest.ema200) {
       regime = "TRENDING";
-      subtype = price > ema20 ? "UPTREND" : "DOWNTREND";
-      confidence = Math.min(1, adx / 50);
-      strategy = "FOLLOW_TREND";
+      subtype = latest.close > latest.ema20 ? "UPTREND" : "DOWNTREND";
+      confidence = 0.8;
+      strategyRecommendation = "FOLLOW_TREND";
       riskLevel = "MEDIUM";
-    }
-    // --- RANGING ---
-    else if (adx < 20 && bbWidth < 0.02) {
-      regime = "RANGING";
-      subtype = "CONSOLIDATION";
-      confidence = 0.7;
-      strategy = "MEAN_REVERSION";
-      riskLevel = "LOW";
-    }
-    // --- BREAKOUT ---
-    else if (volume > avgVolume * 1.5 && adx > 20 && price > ema20) {
+    } else if (latest.adx < 20 && latest.bbUpper && latest.bbLower) {
+      const bbWidth = latest.bbUpper - latest.bbLower;
+      if (bbWidth < (latest.close * 0.01)) {
+        regime = "RANGING";
+        subtype = "CONSOLIDATION";
+        confidence = 0.7;
+        strategyRecommendation = "MEAN_REVERSION";
+        riskLevel = "LOW";
+      }
+    } else if (latest.close > latest.bbUpper && latest.volume > latest.avgVolume * 1.5) {
       regime = "BREAKOUT";
       subtype = "BULLISH_BREAKOUT";
-      confidence = 0.8;
-      strategy = "MOMENTUM_PLAY";
+      confidence = 0.75;
+      strategyRecommendation = "MOMENTUM";
       riskLevel = "HIGH";
-    } else if (volume > avgVolume * 1.5 && adx > 20 && price < ema20) {
+    } else if (latest.close < latest.bbLower && latest.volume > latest.avgVolume * 1.5) {
       regime = "BREAKOUT";
       subtype = "BEARISH_BREAKOUT";
-      confidence = 0.8;
-      strategy = "MOMENTUM_PLAY";
+      confidence = 0.75;
+      strategyRecommendation = "MOMENTUM";
       riskLevel = "HIGH";
-    }
-    // --- VOLATILE ---
-    else if (atr > this.averageATR(indicators, lastIdx) * 1.5) {
+    } else if (latest.atr > (this.safeMean(indicators.atr) * 1.3)) {
       regime = "VOLATILE";
       subtype = "CHAOTIC";
-      confidence = 0.75;
-      strategy = "REDUCE_POSITION";
-      riskLevel = "VERY_HIGH";
+      confidence = 0.6;
+      strategyRecommendation = "REDUCE_POSITION";
+      riskLevel = "HIGH";
     }
 
     return {
@@ -81,56 +94,36 @@ class MarketRegimeClassifier {
       subtype,
       confidence,
       characteristics: {
-        trendStrength: adx,
-        volatility: atr,
-        bbWidth,
-        emaAlignment: this.checkEMAAlignment(ema20, ema50, ema200),
+        trendStrength: latest.adx,
+        volatility: latest.atr,
+        emaAlignment:
+          latest.ema20 > latest.ema50 && latest.ema50 > latest.ema200
+            ? "BULLISH"
+            : latest.ema20 < latest.ema50 && latest.ema50 < latest.ema200
+            ? "BEARISH"
+            : "MIXED",
+        bbWidth: latest.bbUpper && latest.bbLower ? latest.bbUpper - latest.bbLower : 0,
       },
-      strategyRecommendation: strategy,
+      strategyRecommendation,
       riskLevel,
-      metrics: {
-        adx,
-        atr,
-        bbWidth,
-        ema20,
-        ema50,
-        ema200,
-        volume,
-        avgVolume,
-      },
+      metrics: latest,
     };
   }
 
-  /**
-   * 📌 Calculate Bollinger Band Width
-   */
-  calculateBBWidth(indicators, idx) {
-    if (!indicators.bbUpper || !indicators.bbLower) return 0;
-    const upper = indicators.bbUpper[idx];
-    const lower = indicators.bbLower[idx];
-    const mid = indicators.ema20?.[idx] || 1;
-    if (!upper || !lower || !mid) return 0;
-    return (upper - lower) / mid;
+  // --------------------------------------------------
+  // 🔹 Helpers
+  // --------------------------------------------------
+  safeLast(arr) {
+    return Array.isArray(arr) && arr.length ? arr[arr.length - 1] : 0;
   }
 
-  /**
-   * 📌 Average ATR (20-period)
-   */
-  averageATR(indicators, idx) {
-    if (!indicators.atr) return 1;
-    const start = Math.max(0, idx - 20);
-    const slice = indicators.atr.slice(start, idx + 1).filter((x) => x !== null && x !== undefined);
-    if (!slice.length) return 1;
-    return slice.reduce((s, v) => s + v, 0) / slice.length;
+  safeArray(arr) {
+    return Array.isArray(arr) ? arr : [];
   }
 
-  /**
-   * 📌 Check EMA Alignment
-   */
-  checkEMAAlignment(ema20, ema50, ema200) {
-    if (ema20 > ema50 && ema50 > ema200) return "BULLISH";
-    if (ema20 < ema50 && ema50 < ema200) return "BEARISH";
-    return "MIXED";
+  safeMean(arr) {
+    if (!Array.isArray(arr) || arr.length === 0) return 0;
+    return arr.reduce((a, b) => a + (b || 0), 0) / arr.length;
   }
 }
 
