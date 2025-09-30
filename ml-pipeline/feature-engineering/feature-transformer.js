@@ -1,5 +1,5 @@
 // ============================================================================
-// ⚙️ Feature Transformer (Phase 2 - Step 7.2)
+// ⚙️ Feature Transformer (Phase 2 - Step 7.2 + Step 7.4 Ready)
 // Role: Transform raw engineered features into ML-friendly format
 // Author: Forex ML Pipeline
 // ============================================================================
@@ -87,16 +87,9 @@ class FeatureTransformer {
   }
 
   // -----------------------------
-  // Master Transformation Pipeline
+  // 4. Master Transformation Pipeline
   // -----------------------------
   transformFeatures(rawFeaturesHistory) {
-    /**
-     * rawFeaturesHistory = [
-     *   { ema_trend_strength: 0.1, rsi_normalized: 0.56, atr_normalized: 0.004, ... },  // old
-     *   ...
-     *   { ema_trend_strength: 0.14, rsi_normalized: 0.61, atr_normalized: 0.005, ... }  // latest
-     * ]
-     */
     if (!rawFeaturesHistory || rawFeaturesHistory.length < 5) {
       console.warn("⚠️ Not enough data for feature transformation");
       return {};
@@ -128,6 +121,13 @@ class FeatureTransformer {
     }
 
     return transformed;
+  }
+
+  // -----------------------------
+  // 5. Alias for pipeline compatibility
+  // -----------------------------
+  applyTransformations(rawFeaturesHistory) {
+    return this.transformFeatures(rawFeaturesHistory);
   }
 }
 
