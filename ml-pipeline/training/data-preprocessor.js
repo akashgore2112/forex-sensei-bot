@@ -22,7 +22,7 @@ class DataPreprocessor {
     const featureArray = [];
     for (let i = 100; i < candles.length; i++) {
       const candleSlice = candles.slice(0, i + 1); // progressive slice
-      const features = featureGenerator.generateFeatures(candles, indicators);
+      const features = featureGenerator.generateAllFeatures(candles, indicators);
       featureArray.push(features);
     }
 
@@ -149,7 +149,7 @@ class DataPreprocessor {
   preprocess(candles, indicators, featureGenerator) {
     console.log("\n🚀 Starting data preprocessing pipeline...\n");
 
-    const { candles: alignedCandles, features } = this.generateAllFeatures(candles, indicators, featureGenerator);
+    const { candles: alignedCandles, features } = this.generateFeatures(candles, indicators, featureGenerator);
 
     console.log(`📊 Aligned data: ${alignedCandles.length} candles, ${features.length} feature vectors`);
 
