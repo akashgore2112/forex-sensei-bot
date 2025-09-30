@@ -22,7 +22,7 @@ class DataPreprocessor {
     const featureArray = [];
     for (let i = 100; i < candles.length; i++) {
       const candleSlice = candles.slice(0, i + 1); // progressive slice
-      const features = featureGenerator.generateFeatures(candleSlice, indicators);
+      const features = featureGenerator.generateAllFeatures(candles, indicators);
       featureArray.push(features);
     }
 
