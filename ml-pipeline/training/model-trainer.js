@@ -8,7 +8,6 @@ const fs = require("fs");
 const path = require("path");
 
 // Import Models
-// Correct paths
 const LSTMPricePredictor = require("../models/lstm-predictor");
 const SwingSignalClassifier = require("../models/random-forest-classifier");
 const VolatilityPredictor = require("../models/volatility-predictor");
@@ -20,8 +19,9 @@ class ModelTrainer {
     this.version = config.version || `v${Date.now()}`;
     this.saveModels = config.saveModels ?? true;
 
-    // Ensure directory exists
-    if (!fs.existsSync(this.basePath)) fs.mkdirSync(this.basePath, { recursive: true });
+    if (!fs.existsSync(this.basePath)) {
+      fs.mkdirSync(this.basePath, { recursive: true });
+    }
   }
 
   // ==========================================================================
@@ -42,13 +42,25 @@ class ModelTrainer {
   }
 
   // ==========================================================================
-  // 🌲 Random Forest Classifier
+  // 🌲 Random Forest Classifier (Adapter Applied)
   // ==========================================================================
   async trainRandomForest(dataset, options = {}) {
     console.log("🌲 Training Random Forest Classifier...");
 
     const rf = new SwingSignalClassifier(options.rf || { nEstimators: 100 });
-    await rf.trainModel(dataset.train.features, dataset.train.labels);
+
+    const features = dataset.train.features;
+    const labels = dataset.train.labels;
+
+    if (!features || !labels || features.length === 0 || labels.length === 0) {
+      throw new Error("❌ No valid training data for Random Forest");
+    }
+
+    // 🔑 Adapter: Convert feature objects → numeric arrays
+    const X = features.map(f => Object.values(f));
+    const y = labels;
+
+    await rf.trainModel({ X, y });
 
     const modelData = rf.saveModel ? rf.saveModel() : { message: "No saveModel implemented" };
     return this._saveModel("random-forest", modelData, options);
@@ -103,7 +115,9 @@ class ModelTrainer {
     }
 
     const versionPath = path.join(this.basePath, this.version);
-    if (!fs.existsSync(versionPath)) fs.mkdirSync(versionPath, { recursive: true });
+    if (!fs.existsSync(versionPath)) {
+      fs.mkdirSync(versionPath, { recursive: true });
+    }
 
     const filePath = path.join(versionPath, `${name}-model.json`);
     fs.writeFileSync(filePath, JSON.stringify(modelData, null, 2));
@@ -111,7 +125,9 @@ class ModelTrainer {
     // Update "current" symlink
     const currentPath = path.join(this.basePath, "current");
     try {
-      if (fs.existsSync(currentPath)) fs.rmSync(currentPath, { recursive: true, force: true });
+      if (fs.existsSync(currentPath)) {
+        fs.rmSync(currentPath, { recursive: true, force: true });
+      }
       fs.symlinkSync(versionPath, currentPath, "dir");
     } catch (err) {
       console.warn(`⚠️ Could not update symlink: ${err.message}`);
