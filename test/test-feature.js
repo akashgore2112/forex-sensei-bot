@@ -1,5 +1,5 @@
-// test/test-features.js
-const MTFA = require('../mtfa');   // Tumhara existing MTFA analyzer
+// test/test-feature.js
+const MTFA = require('../mtfa');   
 const FeatureGenerator = require('../ml-pipeline/feature-engineering/feature-generator');
 
 async function runTest() {
