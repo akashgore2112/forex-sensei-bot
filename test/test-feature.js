@@ -6,6 +6,7 @@
 // test/test-feature.js
 const MTFA = require('../mtfa');   // Tumhara existing MTFA analyzer
 const FeatureGenerator = require('../ml-pipeline/feature-engineering/feature-generator');
+const math = require('mathjs');
 
 async function runTest() {
   try {
@@ -37,12 +38,26 @@ async function runTest() {
 
     // Step 4: Basic validation
     console.log("\n🔍 Validation:");
-    const hasNaN = Object.values(features).some(
-      v => v === null || v === undefined || isNaN(v)
-    );
-    console.log("NaN/Null check:", hasNaN ? "❌ FAIL" : "✅ PASS");
 
-    console.log("Total feature count:", Object.keys(features).length);
+    // NaN/Null/Infinity check
+    const hasNaN = Object.values(features).some(
+      v => v === null || v === undefined || isNaN(v) || !isFinite(v)
+    );
+    console.log("NaN/Null/Infinity check:", hasNaN ? "❌ FAIL" : "✅ PASS");
+
+    // Count features
+    const featureKeys = Object.keys(features);
+    console.log("Total feature count:", featureKeys.length);
+
+    // Step 5: Statistical summary using mathjs
+    const numericValues = Object.values(features).filter(v => typeof v === "number");
+    if (numericValues.length > 0) {
+      console.log("\n📊 Feature Statistical Summary:");
+      console.log("Mean:", math.mean(numericValues).toFixed(4));
+      console.log("Std Dev:", math.std(numericValues).toFixed(4));
+      console.log("Min:", math.min(numericValues).toFixed(4));
+      console.log("Max:", math.max(numericValues).toFixed(4));
+    }
 
     console.log("\n🎯 Feature Engineering Test Completed!");
     console.log("═════════════════════════════════════");
