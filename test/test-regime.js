@@ -62,16 +62,22 @@ async function runMarketRegime(candles, indicators) {
 }
 
 // ============================================================================
-// 📌 Run Volatility Predictor
+// 📌 Run Volatility Predictor  ✅ FIXED (ATR taken from indicators)
 // ============================================================================
-async function runVolatility(candles) {
+async function runVolatility(candles, indicators) {
   const predictor = new VolatilityPredictor();
-  const latest = candles[candles.length - 1] || {};
 
-  if (!latest || !latest.atr) {
-    console.warn("⚠️ Skipping volatility forecast: latest candle missing ATR");
+  // 🔹 Use ATR from indicators (not candles)
+  const latestATR = indicators.atr?.[indicators.atr.length - 1] || 0;
+  if (!latestATR) {
+    console.warn("⚠️ Skipping volatility forecast: ATR not available");
     return {};
   }
+
+  const latest = {
+    ...candles[candles.length - 1],
+    atr: latestATR
+  };
 
   const result = predictor.predict(candles, latest);
 
@@ -93,7 +99,7 @@ async function runAnalysis() {
     const { candles, indicators } = await processCandles("EUR/USD");
 
     await runMarketRegime(candles, indicators);
-    await runVolatility(candles);
+    await runVolatility(candles, indicators);
 
     console.log("\n🎯 Integrated Market Analysis Completed!");
     console.log("═════════════════════════════════════════");
