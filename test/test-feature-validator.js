@@ -19,9 +19,9 @@ async function runTest() {
   const generator = new FeatureGenerator();
   const rawFeatures = generator.generateAllFeatures(candles, indicators);
 
-  // Step 2: Apply transformations
+  // Step 2: Apply transformations (👉 FIX: wrap in array)
   const transformer = new FeatureTransformer();
-  const transformedFeatures = transformer.applyTransformations(rawFeatures);
+  const transformedFeatures = transformer.applyTransformations([rawFeatures]);
 
   // Step 3: Add cross features
   const cross = new CrossFeatures();
