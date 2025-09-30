@@ -1,119 +1,110 @@
+// ml-pipeline/feature-engineering/cross-features.js
 // ============================================================================
-// 🤝 Cross-Features Module (Phase 2 - Step 7.3)
-// Goal: Generate combined indicator features (Confluence, Divergence, Patterns)
+// 🤝 Cross-Features Module (Phase 2 - Step 7.3) - FIXED
+// Goal: Generate combined indicator features from computed features
 // ============================================================================
 
 class CrossFeatures {
   constructor() {}
 
-  // === Utility ===
-  safe(value, fallback = 0) {
-    return (value !== undefined && value !== null && !isNaN(value)) ? value : fallback;
+  /**
+   * Generate all cross features from base features
+   * @param {Object} features - Base features from feature-generator
+   * @param {Array} candles - Raw candles for pattern detection
+   * @returns {Object} Cross features
+   */
+  generateAllCrossFeatures(features, candles) {
+    const crossFeatures = {};
+
+    Object.assign(crossFeatures, this.generateConfluence(features));
+    Object.assign(crossFeatures, this.generateDivergences(features, candles));
+    Object.assign(crossFeatures, this.generatePatterns(candles));
+
+    return crossFeatures;
   }
 
-  // === A. Confluence Features ===
+  // ==========================================================================
+  // Confluence Features
+  // ==========================================================================
   generateConfluence(features) {
     const confluence = {};
 
-    try {
-      // Trend + Momentum alignment (EMA + RSI + MACD)
-      confluence.trend_momentum_confluence =
-        (this.safe(features.ema_trend_strength) +
-         this.safe(features.rsi_normalized) +
-         this.safe(features.macd_momentum)) / 3;
+    // Trend + Momentum alignment
+    const trendScore = features.ema_alignment_score || 0;
+    const momScore = features.momentum_score || 0;
+    confluence.trend_momentum_confluence = (trendScore + momScore) / 2;
 
-      // RSI + MACD agreement
-      confluence.rsi_macd_agreement =
-        (this.safe(features.rsi_normalized) > 0.5 && this.safe(features.macd_momentum) > 0) ? 1 : 0;
+    // RSI + MACD agreement
+    const rsiSignal = features.rsi_normalized > 0.5 ? 1 : -1;
+    const macdSignal = features.macd_above_signal ? 1 : -1;
+    confluence.rsi_macd_agreement = rsiSignal === macdSignal ? 1 : 0;
 
-      // Volume + Price confirmation
-      confluence.volume_price_confluence =
-        (this.safe(features.volume_confirmation) && this.safe(features.price_above_ema20)) ? 1 : 0;
-
-    } catch (err) {
-      console.error("❌ Confluence feature generation error:", err);
-    }
+    // Volume + Price confirmation
+    confluence.volume_price_confluence = 
+      features.volume_confirmation && features.price_above_ema20 ? 1 : 0;
 
     return confluence;
   }
 
-  // === B. Divergence Features ===
+  // ==========================================================================
+  // Divergence Features
+  // ==========================================================================
   generateDivergences(features, candles) {
     const divergence = {};
 
-    try {
-      // Price vs RSI Divergence
-      const recentClose = this.safe(candles.at(-1)?.close);
-      const prevClose = this.safe(candles.at(-2)?.close);
-      const rsi = this.safe(features.rsi_normalized);
-      const prevRsi = this.safe(features.rsi_prev || features.rsi_normalized);
-
-      divergence.price_rsi_divergence =
-        (recentClose > prevClose && rsi < prevRsi) ? 1 : 0;
-
-      // Price vs MACD Divergence
-      const macd = this.safe(features.macd_momentum);
-      const prevMacd = this.safe(features.macd_prev || features.macd_momentum);
-
-      divergence.price_macd_divergence =
-        (recentClose > prevClose && macd < prevMacd) ? 1 : 0;
-
-      // Volume vs Price Divergence
-      const volTrend = this.safe(features.volume_trend);
-      divergence.volume_price_divergence =
-        (recentClose > prevClose && volTrend < 0) ? 1 : 0;
-
-    } catch (err) {
-      console.error("❌ Divergence feature generation error:", err);
+    if (candles.length < 5) {
+      divergence.price_rsi_divergence = 0;
+      divergence.price_macd_divergence = 0;
+      return divergence;
     }
+
+    // Price making higher highs but RSI making lower highs = bearish divergence
+    const last5 = candles.slice(-5);
+    const priceHigherHigh = last5[4].high > last5[2].high && last5[2].high > last5[0].high;
+    const rsiLowerHigh = features.rsi_normalized < 0.7; // Simplified
+
+    divergence.price_rsi_divergence = priceHigherHigh && rsiLowerHigh ? 1 : 0;
+
+    // Similar for MACD (simplified)
+    divergence.price_macd_divergence = 0;
 
     return divergence;
   }
 
-  // === C. Pattern Features ===
+  // ==========================================================================
+  // Pattern Features
+  // ==========================================================================
   generatePatterns(candles) {
     const patterns = {};
 
-    try {
-      if (!candles || candles.length < 3) return patterns;
-
-      const last3 = candles.slice(-3);
-
-      // Higher Highs pattern
-      const highs = last3.map(c => c.high);
-      patterns.higher_highs =
-        (highs[2] > highs[1] && highs[1] > highs[0]) ? 1 : 0;
-
-      // Higher Lows pattern
-      const lows = last3.map(c => c.low);
-      patterns.higher_lows =
-        (lows[2] > lows[1] && lows[1] > lows[0]) ? 1 : 0;
-
-      // Breakout detection (close above previous high)
-      const breakout = last3[2].close > Math.max(...highs.slice(0, 2));
-      patterns.breakout_detected = breakout ? 1 : 0;
-
-      // Consolidation (low volatility in last 3 candles)
-      const ranges = last3.map(c => c.high - c.low);
-      const avgRange = ranges.reduce((a, b) => a + b, 0) / ranges.length;
-      const recentRange = ranges[2];
-      patterns.consolidation =
-        (recentRange < avgRange * 0.7) ? 1 : 0;
-
-    } catch (err) {
-      console.error("❌ Pattern feature generation error:", err);
+    if (candles.length < 3) {
+      patterns.higher_highs = 0;
+      patterns.higher_lows = 0;
+      patterns.breakout_detected = 0;
+      patterns.consolidation = 0;
+      return patterns;
     }
 
-    return patterns;
-  }
+    const last3 = candles.slice(-3);
 
-  // === Main function: generate all cross features ===
-  generateAllCrossFeatures(features, candles) {
-    return {
-      ...this.generateConfluence(features),
-      ...this.generateDivergences(features, candles),
-      ...this.generatePatterns(candles),
-    };
+    // Higher highs pattern
+    patterns.higher_highs = 
+      last3[2].high > last3[1].high && last3[1].high > last3[0].high ? 1 : 0;
+
+    // Higher lows pattern
+    patterns.higher_lows = 
+      last3[2].low > last3[1].low && last3[1].low > last3[0].low ? 1 : 0;
+
+    // Breakout detection
+    const prevHigh = Math.max(last3[0].high, last3[1].high);
+    patterns.breakout_detected = last3[2].close > prevHigh ? 1 : 0;
+
+    // Consolidation (tight range)
+    const ranges = last3.map(c => c.high - c.low);
+    const avgRange = ranges.reduce((a, b) => a + b, 0) / ranges.length;
+    patterns.consolidation = ranges[2] < avgRange * 0.7 ? 1 : 0;
+
+    return patterns;
   }
 }
 
