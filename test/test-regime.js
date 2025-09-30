@@ -20,10 +20,14 @@ async function processCandles(pair = "EUR/USD") {
   }
 
   const candles = mtfaResult.dailyCandles;
-  console.log(`✅ Got ${candles.length} daily candles from MTFA`);
+  console.log("─────────────────────────────────────────────");
+  console.log(`📊 MTFA returned total candles: ${candles.length}`);
 
   console.log("📈 Calculating indicators...");
   const indicators = await SwingIndicators.calculateAll(candles);
+
+  console.log("✅ Indicators calculated successfully");
+  console.log("─────────────────────────────────────────────\n");
 
   return { candles, indicators };
 }
@@ -38,6 +42,12 @@ async function runMarketRegime(candles, indicators) {
   console.log("\n📌 MARKET REGIME FORECAST:");
   console.log("──────────────────────────────");
   console.log(JSON.stringify(result, null, 2));
+
+  // Extra debug info
+  console.log("──────────────────────────────");
+  console.log(`📊 Usable candles for regime detection: ${candles.length}`);
+  console.log("──────────────────────────────");
+
   return result;
 }
 
@@ -46,12 +56,21 @@ async function runMarketRegime(candles, indicators) {
 // ============================================================================
 async function runVolatility(candles) {
   const predictor = new VolatilityPredictor();
-  const latest = candles[candles.length - 1];
+  const latest = candles[candles.length - 1] || {};
+
+  // Safe fallback
+  if (!latest || !latest.atr) {
+    console.warn("⚠️ Skipping volatility forecast: latest candle missing ATR");
+    return {};
+  }
+
   const result = predictor.predict(candles, latest);
 
   console.log("\n📌 VOLATILITY FORECAST:");
   console.log("──────────────────────────────");
   console.log(JSON.stringify(result, null, 2));
+  console.log("──────────────────────────────");
+
   return result;
 }
 
@@ -71,6 +90,7 @@ async function runAnalysis() {
     await runVolatility(candles);
 
     console.log("\n🎯 Integrated Market Analysis Completed!");
+    console.log("═════════════════════════════════════════");
   } catch (err) {
     console.error("\n❌ FATAL ERROR ❌");
     console.error(err.message);
