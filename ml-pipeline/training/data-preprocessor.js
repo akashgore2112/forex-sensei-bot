@@ -68,7 +68,7 @@ class DataPreprocessor {
 
     // Normalize each sample
     for (let i = 0; i < featuresArray.length; i++) {
-      const normalized Sample = {};
+      const normalizedSample = {};
       
       for (const key of keys) {
         const value = featuresArray[i][key] || 0;
