@@ -80,8 +80,14 @@ class ModelTrainer {
 
     const metrics = await rf.trainModel(trainingData);
 
+    // ✅ Ensure save directory exists
+    const saveDir = path.join(this.basePath, this.version);
+    if (!fs.existsSync(saveDir)) {
+      fs.mkdirSync(saveDir, { recursive: true });
+    }
+
     // Save model
-    const savePath = path.join(this.basePath, this.version, "rf-model.json");
+    const savePath = path.join(saveDir, "rf-model.json");
     await rf.saveModel(savePath);
 
     console.log(`   ✅ Random Forest trained`);
@@ -111,8 +117,14 @@ class ModelTrainer {
     
     const metrics = await lstm.trainModel(trainingData);
 
+    // ✅ Ensure save directory exists
+    const saveDir = path.join(this.basePath, this.version);
+    if (!fs.existsSync(saveDir)) {
+      fs.mkdirSync(saveDir, { recursive: true });
+    }
+
     // Save model
-    const savePath = path.join(this.basePath, this.version, "lstm-model");
+    const savePath = path.join(saveDir, "lstm-model");
     await lstm.model.save(`file://${savePath}`);
 
     console.log(`   ✅ LSTM trained`);
@@ -126,13 +138,19 @@ class ModelTrainer {
   // Save Training Summary
   // ==========================================================================
   _saveTrainingSummary(results) {
+    // ✅ Ensure save directory exists
+    const saveDir = path.join(this.basePath, this.version);
+    if (!fs.existsSync(saveDir)) {
+      fs.mkdirSync(saveDir, { recursive: true });
+    }
+
     const summary = {
       version: this.version,
       trainedAt: new Date().toISOString(),
       models: results
     };
 
-    const summaryPath = path.join(this.basePath, this.version, "training-summary.json");
+    const summaryPath = path.join(saveDir, "training-summary.json");
     fs.writeFileSync(summaryPath, JSON.stringify(summary, null, 2));
 
     console.log(`📋 Training summary saved to: ${summaryPath}`);
