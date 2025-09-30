@@ -43,7 +43,7 @@ async function runPreprocessorTest() {
 
     console.log(`✅ Generated feature history for ${features.length} aligned candles\n`);
 
-    if (features.length === 0) {
+    if (!features || features.length === 0) {
       throw new Error("❌ No features generated. Check feature generator.");
     }
 
@@ -55,13 +55,17 @@ async function runPreprocessorTest() {
     console.log("\n📊 Dataset Metadata:");
     console.log(dataset.metadata);
 
-    // Step 6: Sample outputs
+    // Step 6: Sample outputs (Safe Access)
     console.log("\n🔍 Sample Normalized Feature Vector:");
-    console.log(dataset.train.features[0]);
+    console.log(dataset.train?.features?.[0] || "⚠️ No training features available");
 
     console.log("\n🔍 Sample Sequence (LSTM):");
-    console.log(dataset.sequences.X[0]?.slice(0, 2)); // show first 2 timesteps
-    console.log("Label:", dataset.sequences.Y[0]);
+    if (dataset.sequences.X.length > 0) {
+      console.log(dataset.sequences.X[0].slice(0, 2)); // show first 2 timesteps
+      console.log("Label:", dataset.sequences.Y[0]);
+    } else {
+      console.log("⚠️ No sequences generated (check data size vs lookback)");
+    }
 
     console.log("\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
     console.log("✅ Step 8.1 Preprocessor Test Completed!");
