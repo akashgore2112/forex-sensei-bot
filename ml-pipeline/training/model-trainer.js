@@ -1,17 +1,15 @@
+// ml-pipeline/training/model-trainer.js
 // ============================================================================
-// 🤖 Model Trainer (Phase 2 - Step 8.2)
-// Role: Centralized orchestrator for training + saving all ML models
-// Author: Forex ML Pipeline
+// 🤖 Model Trainer (Phase 2 - Step 8.2) - FIXED
+// Role: Train only ML models (RF, LSTM). Statistical models don't train.
 // ============================================================================
 
 const fs = require("fs");
 const path = require("path");
 
-// Import Models
+// Import ML Models (only these need training)
 const LSTMPricePredictor = require("../models/lstm-predictor");
 const SwingSignalClassifier = require("../models/random-forest-classifier");
-const VolatilityPredictor = require("../models/volatility-predictor");
-const MarketRegimeClassifier = require("../models/market-regime-classifier");
 
 class ModelTrainer {
   constructor(config = {}) {
@@ -19,153 +17,125 @@ class ModelTrainer {
     this.version = config.version || `v${Date.now()}`;
     this.saveModels = config.saveModels ?? true;
 
+    // Ensure base path exists
     if (!fs.existsSync(this.basePath)) {
       fs.mkdirSync(this.basePath, { recursive: true });
     }
   }
 
   // ==========================================================================
-  // 🔄 Unified Training Interface
+  // Train All ML Models (Not Statistical Models)
   // ==========================================================================
   async trainAll(dataset, options = {}) {
-    console.log(`\n🚀 Training ALL models [version=${this.version}]...\n`);
+    console.log(`\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`);
+    console.log(`   TRAINING ALL ML MODELS [${this.version}]`);
+    console.log(`━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n`);
 
     const results = {};
 
+    // Only train ML models (not statistical models)
     results.randomForest = await this.trainRandomForest(dataset, options);
     results.lstm = await this.trainLSTM(dataset, options);
-    results.volatility = await this.trainVolatility(dataset, options);
-    results.regime = await this.trainRegimeClassifier(dataset, options);
 
-    console.log("\n✅ All models trained successfully!");
+    console.log("\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
+    console.log("✅ All ML models trained successfully!");
+    console.log("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n");
+
+    // Save training summary
+    this._saveTrainingSummary(results);
+
     return results;
   }
 
   // ==========================================================================
-  // 🌲 Random Forest Classifier
+  // Random Forest Classifier
   // ==========================================================================
   async trainRandomForest(dataset, options = {}) {
     console.log("🌲 Training Random Forest Classifier...");
 
-    const rf = new SwingSignalClassifier(options.rf || { nEstimators: 100 });
-
-    const features = dataset.train.features;
-    const labels = dataset.train.labels;
-
-    if (!features || !labels || features.length === 0 || labels.length === 0) {
-      throw new Error("❌ No valid training data for Random Forest");
+    if (!dataset.randomForest || !dataset.randomForest.X || dataset.randomForest.X.length === 0) {
+      throw new Error("❌ No Random Forest training data available");
     }
 
-    // 🔑 Adapter → Convert features + labels into synthetic candles
-    const candles = features.map((f, i) => ({
-      ...f,
-      label: labels[i]
-    }));
+    const rf = new SwingSignalClassifier();
+    
+    // Prepare data in format RF expects (candles with indicators)
+    const trainingData = [];
+    for (let i = 0; i < dataset.randomForest.X.length; i++) {
+      const features = dataset.randomForest.X[i];
+      
+      // Convert back to candle-like object
+      trainingData.push({
+        close: dataset.rawCandles[i]?.close || 0,
+        ema20: features[0] || 0,
+        ema50: features[1] || 0,
+        rsi: features[2] || 0,
+        macd: { macd: features[3] || 0 },
+        atr: features[4] || 0,
+        prevClose: i > 0 ? dataset.rawCandles[i - 1]?.close || 0 : 0,
+        volume: dataset.rawCandles[i]?.volume || 0,
+        avgVolume: dataset.rawCandles[i]?.volume || 1
+      });
+    }
 
-    await rf.trainModel(candles);
+    const metrics = await rf.trainModel(trainingData);
 
-    const modelData = rf.saveModel ? rf.saveModel() : { message: "No saveModel implemented" };
-    return this._saveModel("random-forest", modelData, options);
+    // Save model
+    const savePath = path.join(this.basePath, this.version, "rf-model.json");
+    await rf.saveModel(savePath);
+
+    console.log(`   ✅ Random Forest trained`);
+    console.log(`   📊 Accuracy: ${(metrics.accuracy * 100).toFixed(2)}%`);
+    console.log(`   💾 Saved to: ${savePath}\n`);
+
+    return { success: true, path: savePath, metrics };
   }
 
   // ==========================================================================
-  // 🔮 LSTM Price Predictor
+  // LSTM Price Predictor
   // ==========================================================================
   async trainLSTM(dataset, options = {}) {
     console.log("🔮 Training LSTM Price Predictor...");
 
-    if (!dataset.sequences || !dataset.sequences.X || dataset.sequences.X.length === 0) {
-      throw new Error("❌ No valid sequence data for LSTM");
+    if (!dataset.lstm || !dataset.lstm.X || dataset.lstm.X.length === 0) {
+      throw new Error("❌ No LSTM sequence data available");
     }
 
-    const lstm = new LSTMPricePredictor(options.lstm || { epochs: 50, batchSize: 32 });
-    await lstm.trainModel(dataset.sequences.X, dataset.sequences.Y);
+    const lstm = new LSTMPricePredictor();
+    
+    // Build model first
+    await lstm.buildModel();
 
-    const modelData = lstm.saveModel ? await lstm.saveModel() : { message: "No saveModel implemented" };
-    return this._saveModel("lstm", modelData, options);
+    // Prepare data in format LSTM expects
+    const trainingData = dataset.rawCandles.slice(0, dataset.lstm.X.length + 60);
+    
+    const metrics = await lstm.trainModel(trainingData);
+
+    // Save model
+    const savePath = path.join(this.basePath, this.version, "lstm-model");
+    await lstm.model.save(`file://${savePath}`);
+
+    console.log(`   ✅ LSTM trained`);
+    console.log(`   📊 Final loss: ${metrics?.history?.loss?.slice(-1)[0]?.toFixed(6) || "N/A"}`);
+    console.log(`   💾 Saved to: ${savePath}\n`);
+
+    return { success: true, path: savePath, metrics };
   }
 
   // ==========================================================================
-  // 📉 Volatility Predictor
+  // Save Training Summary
   // ==========================================================================
-  async trainVolatility(dataset, options = {}) {
-    console.log("📉 Training Volatility Predictor...");
+  _saveTrainingSummary(results) {
+    const summary = {
+      version: this.version,
+      trainedAt: new Date().toISOString(),
+      models: results
+    };
 
-    const vol = new VolatilityPredictor(options.vol || {});
+    const summaryPath = path.join(this.basePath, this.version, "training-summary.json");
+    fs.writeFileSync(summaryPath, JSON.stringify(summary, null, 2));
 
-    const features = dataset.train.features;
-    const labels = dataset.train.labels;
-
-    if (!features || !labels || features.length === 0 || labels.length === 0) {
-      throw new Error("❌ No valid training data for Volatility Predictor");
-    }
-
-    const X = features.map(f => Object.values(f));
-    const y = labels;
-
-    await vol.trainModel({ X, y });
-
-    const modelData = vol.saveModel ? vol.saveModel() : { message: "No saveModel implemented" };
-    return this._saveModel("volatility", modelData, options);
-  }
-
-  // ==========================================================================
-  // 📊 Market Regime Classifier
-  // ==========================================================================
-  async trainRegimeClassifier(dataset, options = {}) {
-    console.log("📊 Training Market Regime Classifier...");
-
-    const regime = new MarketRegimeClassifier(options.regime || {});
-
-    const features = dataset.train.features;
-    const labels = dataset.train.labels;
-
-    if (!features || !labels || features.length === 0 || labels.length === 0) {
-      throw new Error("❌ No valid training data for Market Regime Classifier");
-    }
-
-    // 🔑 Adapter → Convert features + labels into synthetic candles
-    const candles = features.map((f, i) => ({
-      ...f,
-      label: labels[i]
-    }));
-
-    await regime.trainModel(candles);
-
-    const modelData = regime.saveModel ? regime.saveModel() : { message: "No saveModel implemented" };
-    return this._saveModel("regime", modelData, options);
-  }
-
-  // ==========================================================================
-  // 💾 Save Model with Versioning
-  // ==========================================================================
-  _saveModel(name, modelData, options = {}) {
-    if (!this.saveModels) {
-      console.log(`⚠️ Skipping save for ${name} (saveModels=false)`);
-      return { saved: false, model: modelData };
-    }
-
-    const versionPath = path.join(this.basePath, this.version);
-    if (!fs.existsSync(versionPath)) {
-      fs.mkdirSync(versionPath, { recursive: true });
-    }
-
-    const filePath = path.join(versionPath, `${name}-model.json`);
-    fs.writeFileSync(filePath, JSON.stringify(modelData, null, 2));
-
-    // Update "current" symlink
-    const currentPath = path.join(this.basePath, "current");
-    try {
-      if (fs.existsSync(currentPath)) {
-        fs.rmSync(currentPath, { recursive: true, force: true });
-      }
-      fs.symlinkSync(versionPath, currentPath, "dir");
-    } catch (err) {
-      console.warn(`⚠️ Could not update symlink: ${err.message}`);
-    }
-
-    console.log(`💾 Saved ${name} model → ${filePath}`);
-    return { saved: true, path: filePath, model: modelData };
+    console.log(`📋 Training summary saved to: ${summaryPath}`);
   }
 }
 
