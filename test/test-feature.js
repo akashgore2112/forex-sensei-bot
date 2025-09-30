@@ -53,10 +53,14 @@ async function runTest() {
     const numericValues = Object.values(features).filter(v => typeof v === "number");
     if (numericValues.length > 0) {
       console.log("\n📊 Feature Statistical Summary:");
-      console.log("Mean:", math.mean(numericValues).toFixed(4));
-      console.log("Std Dev:", math.std(numericValues).toFixed(4));
-      console.log("Min:", math.min(numericValues).toFixed(4));
-      console.log("Max:", math.max(numericValues).toFixed(4));
+      console.log("Mean:", math.mean(numericValues).toFixed(6));
+      console.log("Std Dev:", math.std(numericValues).toFixed(6));
+      console.log("Min:", math.min(numericValues).toFixed(6));
+      console.log("Max:", math.max(numericValues).toFixed(6));
+
+      // Highlight skewness & kurtosis
+      console.log("Skewness:", features.returns_skew?.toFixed(6) ?? "N/A");
+      console.log("Kurtosis:", features.returns_kurtosis?.toFixed(6) ?? "N/A");
     }
 
     console.log("\n🎯 Feature Engineering Test Completed!");
