@@ -1,14 +1,14 @@
-// ml-pipeline/test/test-features.js
-const MTFA = require('../../mtfa');   // root mtfa.js
-const FeatureGenerator = require('../feature-engineering/feature-generator');
+// test/test-features.js
+const MTFA = require('../mtfa');   // Tumhara existing MTFA analyzer
+const FeatureGenerator = require('../ml-pipeline/feature-engineering/feature-generator');
 
 async function runTest() {
   try {
     // Step 1: Run MTFA to get real data
-    const mtfaData = await MTFA.analyze("EUR/USD");
+    const mtfaData = await MTFA.analyzeMultipleTimeframes("EUR/USD");
     
-    const candles = mtfaData.dailyCandles;   // Daily OHLCV candles
-    const indicators = mtfaData.daily;      // Daily indicators
+    const candles = mtfaData.daily.rawData;       // Daily candles (OHLCV)
+    const indicators = mtfaData.daily.indicators; // Indicators (ema, rsi, macd, atr, etc.)
     
     // Step 2: Generate features
     const generator = new FeatureGenerator();
@@ -24,7 +24,7 @@ async function runTest() {
     console.log("Keys count:", Object.keys(features).length);
     
   } catch (err) {
-    console.error("❌ Error during feature test:", err.message);
+    console.error("❌ Error during feature test:", err);
   }
 }
 
