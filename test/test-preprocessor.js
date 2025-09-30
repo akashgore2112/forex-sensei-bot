@@ -25,7 +25,7 @@ async function runPreprocessorTest() {
     const indicators = await SwingIndicators.calculateAll(candles);
     console.log("✅ Indicators ready\n");
 
-    // Step 3: Generate full feature history
+    // Step 3: Generate full feature history (aligned!)
     console.log("⚙️ Generating feature history...");
     const featureGen = new FeatureGenerator();
     const preprocessor = new DataPreprocessor({
@@ -34,12 +34,22 @@ async function runPreprocessorTest() {
       normalization: "zscore",
     });
 
-    const featureHistory = preprocessor.adaptFeatures(candles, featureGen, indicators);
-    console.log(`✅ Generated feature history for ${featureHistory.length} candles\n`);
+    // Alignment fix: return both aligned candles + features
+    const { candles: alignedCandles, features } = preprocessor.adaptFeatures(
+      candles,
+      featureGen,
+      indicators
+    );
+
+    console.log(`✅ Generated feature history for ${features.length} aligned candles\n`);
+
+    if (features.length === 0) {
+      throw new Error("❌ No features generated. Check feature generator.");
+    }
 
     // Step 4: Preprocess into ML dataset
     console.log("🚀 Running preprocessing pipeline...");
-    const dataset = preprocessor.preprocess(candles, featureHistory);
+    const dataset = preprocessor.preprocess(alignedCandles, features);
 
     // Step 5: Print metadata
     console.log("\n📊 Dataset Metadata:");
@@ -50,7 +60,7 @@ async function runPreprocessorTest() {
     console.log(dataset.train.features[0]);
 
     console.log("\n🔍 Sample Sequence (LSTM):");
-    console.log(dataset.sequences.X[0].slice(0, 2)); // show first 2 timesteps
+    console.log(dataset.sequences.X[0]?.slice(0, 2)); // show first 2 timesteps
     console.log("Label:", dataset.sequences.Y[0]);
 
     console.log("\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
