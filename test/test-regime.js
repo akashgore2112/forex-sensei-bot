@@ -29,6 +29,10 @@ async function processCandles(pair = "EUR/USD") {
   console.log("✅ Indicators calculated successfully");
   console.log("─────────────────────────────────────────────\n");
 
+  // 🔹 Debug ATR
+  console.log(`🔍 ATR Debug → Count: ${indicators.atr?.length || 0}`);
+  console.log(`🔍 ATR Debug → Last Value: ${indicators.atr?.[indicators.atr?.length - 1] || "N/A"}`);
+
   return { candles, indicators };
 }
 
@@ -62,26 +66,24 @@ async function runMarketRegime(candles, indicators) {
 }
 
 // ============================================================================
-// 📌 Run Volatility Predictor ✅ FIXED (ATR merged into candles)
+// 📌 Run Volatility Predictor  ✅ FIXED (ATR taken from indicators)
 // ============================================================================
 async function runVolatility(candles, indicators) {
   const predictor = new VolatilityPredictor();
 
-  // 🔹 Attach ATR values to each candle
-  const atrSeries = indicators.atr || [];
-  const enrichedCandles = candles.map((c, i) => ({
-    ...c,
-    atr: atrSeries[i] || 0
-  }));
-
-  // 🔹 Latest candle with ATR
-  const latest = enrichedCandles[enrichedCandles.length - 1];
-  if (!latest.atr) {
+  // 🔹 Use ATR from indicators (not candles)
+  const latestATR = indicators.atr?.[indicators.atr.length - 1] || 0;
+  if (!latestATR) {
     console.warn("⚠️ Skipping volatility forecast: ATR not available");
     return {};
   }
 
-  const result = predictor.predict(enrichedCandles);
+  const latest = {
+    ...candles[candles.length - 1],
+    atr: latestATR
+  };
+
+  const result = predictor.predict(candles, latest);
 
   console.log("\n📌 VOLATILITY FORECAST:");
   console.log("═══════════════════════════════");
