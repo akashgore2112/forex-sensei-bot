@@ -1,70 +1,52 @@
+// ml-pipeline/training/data-preprocessor.js
 // ============================================================================
-// 📊 Data Preprocessor (Phase 2 - Step 8.1) + Integrated Feature Adapter
-// Role: Convert raw MTFA + Feature Engineering output into ML-ready datasets
-// Author: Forex ML Pipeline
+// 📊 Data Preprocessor (Phase 2 - Step 8.1) - FIXED
+// Role: Convert Phase 1 + Feature Engineering into ML-ready datasets
 // ============================================================================
 
 const math = require("mathjs");
 
 class DataPreprocessor {
   constructor(config = {}) {
-    this.lookback = config.lookback || 60; // for LSTM sequences
-    this.predictionHorizon = config.predictionHorizon || 5; // for labels
-    this.normalizationMethod = config.normalization || "zscore"; // default for LSTM
+    this.lookback = config.lookback || 60;
+    this.predictionHorizon = config.predictionHorizon || 5;
+    this.normalizationMethod = config.normalization || "zscore";
     this.splitRatio = config.splitRatio || { train: 0.7, val: 0.15, test: 0.15 };
   }
 
   // ==========================================================================
-  // 🛠️ Utility
+  // Feature Generation - Generate features once for all candles
   // ==========================================================================
-  safe(value, fallback = 0) {
-    return value !== undefined && value !== null && !isNaN(value) ? value : fallback;
-  }
-
-  minMaxScale(value, min, max) {
-    if (max === min) return 0.5;
-    return (value - min) / (max - min);
-  }
-
-  zScoreScale(value, mean, std) {
-    return std === 0 ? 0 : (value - mean) / std;
-  }
-
-  // ==========================================================================
-  // 🔄 Feature Adapter (UPDATED)
-  // ==========================================================================
-  adaptFeatures(candles, featureGenerator, indicators) {
-    const history = [];
-    const alignedCandles = [];
-
-    for (let i = 0; i < candles.length; i++) {
-      try {
-        const candleSlice = candles.slice(0, i + 1);
-        const indicatorSlice = {};
-        for (const key of Object.keys(indicators)) {
-          indicatorSlice[key] = Array.isArray(indicators[key])
-            ? indicators[key].slice(0, i + 1)
-            : indicators[key];
-        }
-
-        const features = featureGenerator.generateAllFeatures(candleSlice, indicatorSlice);
-
-        // ✅ Only push valid features (skip <100 candles)
-        if (Object.keys(features).length > 0) {
-          history.push(features);
-          alignedCandles.push(candles[i]);
-        }
-      } catch (err) {
-        console.warn(`⚠️ Skipping feature generation at index ${i}: ${err.message}`);
-      }
+  generateFeatures(candles, indicators, featureGenerator) {
+    console.log("⚙️ Generating features from raw data...");
+    
+    // Generate features once for the full dataset
+    const features = featureGenerator.generateAllFeatures(candles, indicators);
+    
+    // Convert single feature object into array matching candle length
+    // (Each candle gets the same latest features - simplified approach)
+    const featureArray = [];
+    const featureKeys = Object.keys(features);
+    
+    for (let i = 100; i < candles.length; i++) {
+      // Only start from index 100 (minimum for feature generation)
+      const featureObj = {};
+      featureKeys.forEach(key => {
+        featureObj[key] = features[key];
+      });
+      featureArray.push(featureObj);
     }
-
-    // ✅ Return both aligned candles and features
-    return { candles: alignedCandles, features: history };
+    
+    // Align candles to match feature array
+    const alignedCandles = candles.slice(100);
+    
+    console.log(`✅ Generated features for ${featureArray.length} candles\n`);
+    
+    return { candles: alignedCandles, features: featureArray };
   }
-  
+
   // ==========================================================================
-  // 🧮 Normalization
+  // Normalization
   // ==========================================================================
   normalize(featuresArray, method = this.normalizationMethod) {
     if (!featuresArray || featuresArray.length === 0) return [];
@@ -72,29 +54,41 @@ class DataPreprocessor {
     const normalized = [];
     const keys = Object.keys(featuresArray[0]);
 
+    // Calculate stats for each feature
+    const stats = {};
     for (const key of keys) {
-      const series = featuresArray.map(f => this.safe(f[key]));
-      const min = math.min(series);
-      const max = math.max(series);
-      const mean = math.mean(series);
-      const std = math.std(series);
+      const series = featuresArray.map(f => f[key] || 0).filter(v => Number.isFinite(v));
+      stats[key] = {
+        min: math.min(series),
+        max: math.max(series),
+        mean: math.mean(series),
+        std: math.std(series) || 1
+      };
+    }
 
-      for (let i = 0; i < featuresArray.length; i++) {
-        if (!normalized[i]) normalized[i] = {};
-        const value = series[i];
-
-        normalized[i][key] =
-          method === "minmax"
-            ? this.minMaxScale(value, min, max)
-            : this.zScoreScale(value, mean, std);
+    // Normalize each sample
+    for (let i = 0; i < featuresArray.length; i++) {
+      const normalized Sample = {};
+      
+      for (const key of keys) {
+        const value = featuresArray[i][key] || 0;
+        const { min, max, mean, std } = stats[key];
+        
+        if (method === "minmax") {
+          normalizedSample[key] = max > min ? (value - min) / (max - min) : 0.5;
+        } else {
+          normalizedSample[key] = (value - mean) / std;
+        }
       }
+      
+      normalized.push(normalizedSample);
     }
 
     return normalized;
   }
 
   // ==========================================================================
-  // 🏷️ Label Generation
+  // Label Generation
   // ==========================================================================
   generateLabels(candles) {
     const labels = [];
@@ -105,8 +99,8 @@ class DataPreprocessor {
       const change = (futureClose - currentClose) / currentClose;
 
       let label = "HOLD";
-      if (change > 0.01) label = "BUY";
-      else if (change < -0.01) label = "SELL";
+      if (change > 0.01) label = "BUY";        // +1% or more
+      else if (change < -0.01) label = "SELL"; // -1% or less
 
       labels.push(label);
     }
@@ -115,10 +109,10 @@ class DataPreprocessor {
   }
 
   // ==========================================================================
-  // 📐 Dataset Split
+  // Dataset Split
   // ==========================================================================
   splitData(features, labels) {
-    const total = features.length;
+    const total = Math.min(features.length, labels.length);
     const trainEnd = Math.floor(total * this.splitRatio.train);
     const valEnd = trainEnd + Math.floor(total * this.splitRatio.val);
 
@@ -132,8 +126,8 @@ class DataPreprocessor {
         labels: labels.slice(trainEnd, valEnd),
       },
       test: {
-        features: features.slice(valEnd),
-        labels: labels.slice(valEnd),
+        features: features.slice(valEnd, total),
+        labels: labels.slice(valEnd, total),
       },
       metadata: {
         totalSamples: total,
@@ -146,51 +140,89 @@ class DataPreprocessor {
   }
 
   // ==========================================================================
-  // 🔗 LSTM Data Sequencing
+  // LSTM Sequence Creation
   // ==========================================================================
-  createSequences(features, labels) {
-    const X = [];
-    const Y = [];
+  createSequences(features, candles) {
+    const sequences = [];
+    const targets = [];
 
     for (let i = this.lookback; i < features.length - this.predictionHorizon; i++) {
-      const seq = features.slice(i - this.lookback, i);
-      X.push(seq);
+      // Sequence: last N feature vectors
+      const sequence = features.slice(i - this.lookback, i);
+      sequences.push(sequence);
 
-      // Encode labels (BUY/SELL/HOLD → one-hot for classification)
-      const label = labels[i];
-      if (label === "BUY") Y.push([1, 0, 0]);
-      else if (label === "SELL") Y.push([0, 1, 0]);
-      else Y.push([0, 0, 1]);
+      // Target: next 5 close prices (for LSTM price prediction)
+      const futurePrices = [];
+      for (let j = 1; j <= this.predictionHorizon; j++) {
+        futurePrices.push(candles[i + j].close);
+      }
+      targets.push(futurePrices);
     }
 
-    return { X, Y };
+    return { X: sequences, Y: targets };
   }
 
   // ==========================================================================
-  // 🚀 Main Preprocessing Pipeline
+  // Random Forest Dataset (features as arrays)
   // ==========================================================================
-  preprocess(candles, features) {
-    if (!candles || !features || candles.length !== features.length) {
-      throw new Error(
-        `❌ Invalid input to DataPreprocessor: candles (${candles?.length}) and features (${features?.length}) mismatch`
-      );
-    }
+  prepareForRandomForest(features, labels) {
+    // Convert feature objects to arrays for Random Forest
+    const X = features.map(f => Object.values(f));
+    const y = labels.map(label => {
+      if (label === "BUY") return 0;
+      if (label === "SELL") return 1;
+      return 2; // HOLD
+    });
 
-    // Step 1: Normalize features
+    return { X, y };
+  }
+
+  // ==========================================================================
+  // Main Preprocessing Pipeline
+  // ==========================================================================
+  preprocess(candles, indicators, featureGenerator) {
+    console.log("\n🚀 Starting data preprocessing pipeline...\n");
+
+    // Step 1: Generate features
+    const { candles: alignedCandles, features } = this.generateFeatures(
+      candles,
+      indicators,
+      featureGenerator
+    );
+
+    console.log(`📊 Aligned data: ${alignedCandles.length} candles, ${features.length} feature vectors`);
+
+    // Step 2: Normalize features
+    console.log("⚙️ Normalizing features...");
     const normalized = this.normalize(features, this.normalizationMethod);
 
-    // Step 2: Generate labels
-    const labels = this.generateLabels(candles);
+    // Step 3: Generate labels
+    console.log("🏷️ Generating labels...");
+    const labels = this.generateLabels(alignedCandles);
 
-    // Step 3: Split data
+    // Step 4: Split data
+    console.log("📐 Splitting dataset...");
     const split = this.splitData(normalized, labels);
 
-    // Step 4: For LSTM create sequences
-    const sequences = this.createSequences(normalized, labels);
+    // Step 5: Create LSTM sequences
+    console.log("🔗 Creating LSTM sequences...");
+    const lstmData = this.createSequences(normalized, alignedCandles);
+
+    // Step 6: Prepare Random Forest data
+    console.log("🌲 Preparing Random Forest data...");
+    const rfData = this.prepareForRandomForest(
+      split.train.features,
+      split.train.labels
+    );
+
+    console.log("\n✅ Preprocessing complete!\n");
 
     return {
       ...split,
-      sequences,
+      lstm: lstmData,
+      randomForest: rfData,
+      rawCandles: alignedCandles,
+      rawFeatures: features
     };
   }
 }
