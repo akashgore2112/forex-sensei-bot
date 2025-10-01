@@ -28,16 +28,13 @@ class EnsemblePredictor {
     console.log(`📂 Loading models from: ${modelPath}`);
 
     try {
-      // LSTM
       this.lstm = new LSTMPricePredictor();
       const lstmPath = `file://${path.resolve(modelPath, "lstm-model", "model.json")}`;
       await this.lstm.loadModel(lstmPath);
 
-      // Random Forest
       this.randomForest = new SwingSignalClassifier();
       await this.randomForest.loadModel(path.join(modelPath, "rf-model.json"));
 
-      // Statistical models (no loading needed)
       this.volatilityPredictor = new VolatilityPredictor();
       this.regimeClassifier = new RegimeClassifier();
 
@@ -54,34 +51,37 @@ class EnsemblePredictor {
       throw new Error("Need at least 100 candles for prediction");
     }
 
-    const recentData = candles.slice(-60);
-    const currentData = candles[candles.length - 1];
+    // Merge indicators into ALL candles (LSTM needs last 60 with indicators)
+    const candlesWithIndicators = candles.map((candle, i) => ({
+      ...candle,
+      ema20: indicators.ema20[i] || 0,
+      ema50: indicators.ema50[i] || 0,
+      ema200: indicators.ema200[i] || 0,
+      rsi: indicators.rsi14[i] || 0,
+      macd: indicators.macd?.macd[i] || 0,
+      atr: indicators.atr[i] || 0,
+      adx: indicators.adx[i] || 0,
+      prevClose: i > 0 ? candles[i-1].close : candle.close,
+      avgVolume: candle.volume || 1
+    }));
 
-    // Add indicators to current candle
-    const currentWithIndicators = {
-      ...currentData,
-      ema20: indicators.ema20[indicators.ema20.length - 1] || 0,
-      ema50: indicators.ema50[indicators.ema50.length - 1] || 0,
-      ema200: indicators.ema200[indicators.ema200.length - 1] || 0,
-      rsi: indicators.rsi14[indicators.rsi14.length - 1] || 0,
-      macd: {
-        macd: indicators.macd?.macd[indicators.macd.macd.length - 1] || 0,
-        signal: indicators.macd?.signal[indicators.macd.signal.length - 1] || 0,
-        histogram: indicators.macd?.histogram[indicators.macd.histogram.length - 1] || 0
-      },
-      atr: indicators.atr[indicators.atr.length - 1] || 0,
-      adx: indicators.adx[indicators.adx.length - 1] || 0,
-      prevClose: candles[candles.length - 2]?.close || currentData.close,
-      avgVolume: currentData.volume || 1
-    };
+    const recentData = candlesWithIndicators.slice(-60);
+    const currentData = candlesWithIndicators[candlesWithIndicators.length - 1];
 
     // Get predictions
+    console.log("   🔮 LSTM prediction...");
     const lstmPrediction = await this.lstm.predict(recentData);
-    const rfPrediction = this.randomForest.predict(currentWithIndicators);
+
+    console.log("   🌲 Random Forest prediction...");
+    const rfPrediction = this.randomForest.predict(currentData);
+
+    console.log("   📊 Volatility prediction...");
     const volPrediction = this.volatilityPredictor.predict(candles);
+
+    console.log("   🎯 Regime classification...");
     const regimePrediction = this.regimeClassifier.classifyRegime(candles, indicators);
 
-    console.log("📊 Individual predictions collected");
+    console.log("✅ All predictions collected");
 
     // Combine signals
     const ensembleResult = this.combineSignals(
