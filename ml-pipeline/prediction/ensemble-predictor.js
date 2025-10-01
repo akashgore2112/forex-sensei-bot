@@ -44,11 +44,11 @@ class EnsemblePredictor {
     const lstmPath = `file://${path.resolve(modelPath, "lstm-model", "model.json")}`;
     await this.lstm.loadModel(lstmPath);
 
-    // Random Forest (simple JSON)
+    // Random Forest (JSON)
     this.randomForest = new SwingSignalClassifier();
     await this.randomForest.loadModel(path.join(modelPath, "rf-model.json"));
 
-    // Volatility + Regime = statistical models (no training needed)
+    // Volatility + Regime = statistical models (no training reload required)
     this.volatilityPredictor = new VolatilityPredictor();
     this.regimeClassifier = new RegimeClassifier();
 
@@ -62,7 +62,7 @@ class EnsemblePredictor {
     console.log("🔮 Running ensemble predictions...");
 
     const recentData = candles.slice(-60);         // last 60 candles for LSTM
-    const currentData = candles[candles.length-1]; // latest candle
+    const currentData = candles[candles.length - 1]; // latest candle
 
     // Get predictions
     const lstmPrediction = await this.lstm.predict(recentData);
