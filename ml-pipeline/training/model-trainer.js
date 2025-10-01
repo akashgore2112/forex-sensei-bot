@@ -1,13 +1,10 @@
 // ml-pipeline/training/model-trainer.js
-// ============================================================================
-// 🤖 Model Trainer (Phase 2 - Step 8.2) - FIXED
-// ============================================================================
-
 const fs = require("fs");
 const path = require("path");
 
 const LSTMPricePredictor = require("../models/lstm-predictor");
 const SwingSignalClassifier = require("../models/random-forest-classifier");
+const SwingIndicators = require("../../swing-indicators");
 
 class ModelTrainer {
   constructor(config = {}) {
@@ -39,19 +36,37 @@ class ModelTrainer {
     return results;
   }
 
-  // ✅ FIXED: Use raw candles directly
   async trainRandomForest(dataset, options = {}) {
     console.log("🌲 Training Random Forest Classifier...");
 
     if (!dataset.rawCandles || dataset.rawCandles.length === 0) {
-      throw new Error("❌ No raw candles available for Random Forest training");
+      throw new Error("❌ No raw candles available");
     }
 
+    // Recalculate indicators for raw candles
+    console.log("   📊 Calculating indicators for training data...");
+    const indicators = await SwingIndicators.calculateAll(dataset.rawCandles);
+
+    // Merge indicators into candles
+    const candlesWithIndicators = dataset.rawCandles.map((candle, i) => ({
+      ...candle,
+      ema20: indicators.ema20[i] || 0,
+      ema50: indicators.ema50[i] || 0,
+      ema200: indicators.ema200[i] || 0,
+      rsi: indicators.rsi14[i] || 0,
+      macd: {
+        macd: indicators.macd?.macd[i] || 0,
+        signal: indicators.macd?.signal[i] || 0,
+        histogram: indicators.macd?.histogram[i] || 0
+      },
+      atr: indicators.atr[i] || 0,
+      adx: indicators.adx[i] || 0,
+      prevClose: i > 0 ? dataset.rawCandles[i-1].close : candle.close,
+      avgVolume: candle.volume || 1
+    }));
+
     const rf = new SwingSignalClassifier();
-    
-    // ✅ RF model has its own prepareFeatures() - just pass raw candles
-    const trainingData = dataset.rawCandles;
-    const metrics = await rf.trainModel(trainingData);
+    const metrics = await rf.trainModel(candlesWithIndicators);
 
     const saveDir = path.join(this.basePath, this.version);
     if (!fs.existsSync(saveDir)) {
@@ -69,21 +84,29 @@ class ModelTrainer {
     return { success: true, path: savePath, metrics };
   }
 
-  // ✅ FIXED: Use raw candles directly
   async trainLSTM(dataset, options = {}) {
     console.log("🔮 Training LSTM Price Predictor...");
 
     if (!dataset.rawCandles || dataset.rawCandles.length < 100) {
-      throw new Error("❌ Not enough candles for LSTM training");
+      throw new Error("❌ Not enough candles");
     }
 
-    const lstm = new LSTMPricePredictor();
-    
-    await lstm.buildModel();
+    // Recalculate indicators
+    console.log("   📊 Calculating indicators for LSTM training...");
+    const indicators = await SwingIndicators.calculateAll(dataset.rawCandles);
 
-    // ✅ Pass raw candles - LSTM has its own prepareTrainingData()
-    const trainingData = dataset.rawCandles;
-    await lstm.trainModel(trainingData);
+    // Merge indicators into candles
+    const candlesWithIndicators = dataset.rawCandles.map((candle, i) => ({
+      ...candle,
+      ema20: indicators.ema20[i] || 0,
+      rsi: indicators.rsi14[i] || 0,
+      macd: indicators.macd?.macd[i] || 0,
+      atr: indicators.atr[i] || 0
+    }));
+
+    const lstm = new LSTMPricePredictor();
+    await lstm.buildModel();
+    await lstm.trainModel(candlesWithIndicators);
 
     const saveDir = path.join(this.basePath, this.version);
     if (!fs.existsSync(saveDir)) {
@@ -104,10 +127,7 @@ class ModelTrainer {
     return { 
       success: true, 
       path: savePath, 
-      metrics: {
-        finalLoss,
-        finalValLoss
-      }
+      metrics: { finalLoss, finalValLoss }
     };
   }
 
