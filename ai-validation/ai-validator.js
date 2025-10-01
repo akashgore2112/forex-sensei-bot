@@ -1,18 +1,21 @@
 // ai-validation/ai-validator.js
-
 const OpenAI = require('openai');
 const PromptBuilder = require('./prompt-builder');
 const ResponseParser = require('./response-parser');
 
 class AIValidator {
   constructor(config = {}) {
+    if (!config.apiKey && !process.env.OPENAI_API_KEY) {
+      throw new Error("OPENAI_API_KEY is required. Set it in .env or pass in config.");
+    }
+
     this.openai = new OpenAI({
       apiKey: config.apiKey || process.env.OPENAI_API_KEY
     });
 
     this.model = config.model || process.env.OPENAI_MODEL || "gpt-4";
-    this.temperature = config.temperature || parseFloat(process.env.AI_TEMPERATURE) || 0.3;
-    this.maxTokens = config.maxTokens || parseInt(process.env.AI_MAX_TOKENS) || 1000;
+    this.temperature = config.temperature || parseFloat(process.env.AI_TEMPERATURE || "0.3");
+    this.maxTokens = config.maxTokens || parseInt(process.env.AI_MAX_TOKENS || "1000");
 
     this.promptBuilder = new PromptBuilder();
     this.responseParser = new ResponseParser();
@@ -22,14 +25,12 @@ class AIValidator {
     console.log("🤖 Sending prediction to GPT-4 for validation...");
 
     try {
-      // Build structured prompt
       const prompt = this.promptBuilder.buildValidationPrompt({
         ensemble: ensemblePrediction,
         mtfa: mtfaData,
         context: marketContext
       });
 
-      // Call GPT-4
       const completion = await this.openai.chat.completions.create({
         model: this.model,
         messages: [
@@ -48,8 +49,6 @@ class AIValidator {
       });
 
       const rawResponse = completion.choices[0].message.content;
-
-      // Parse and validate response
       const parsedResponse = this.responseParser.parse(rawResponse);
 
       console.log("✅ AI validation complete");
@@ -57,14 +56,13 @@ class AIValidator {
 
     } catch (error) {
       console.error("❌ AI validation failed:", error.message);
-
-      // Fallback response if API fails
       return this.getFallbackResponse(ensemblePrediction);
     }
   }
 
   getSystemPrompt() {
     return `You are a professional forex trading analyst specializing in EUR/USD.
+
 Your role is to validate machine learning trading signals by:
 1. Analyzing technical confluence across multiple timeframes
 2. Identifying potential risks and market conditions
@@ -73,7 +71,7 @@ Your role is to validate machine learning trading signals by:
 
 You must respond ONLY in valid JSON format with this exact structure:
 {
-  "validation": "APPROVE|REJECT|CAUTION",
+  "validation": "APPROVE",
   "aiConfidence": 0.85,
   "reasoning": "detailed explanation",
   "risks": ["risk1", "risk2"],
@@ -82,7 +80,11 @@ You must respond ONLY in valid JSON format with this exact structure:
   "recommendations": "specific advice"
 }
 
-Be conservative - only APPROVE high-quality setups with clear confluence.`;
+CRITICAL RULES:
+- validation must be exactly: APPROVE, REJECT, or CAUTION
+- aiConfidence must be between 0 and 1
+- quality must be between 0 and 100
+- Be conservative - only APPROVE high-quality setups with clear confluence`;
   }
 
   getFallbackResponse(ensemble) {
@@ -92,7 +94,7 @@ Be conservative - only APPROVE high-quality setups with clear confluence.`;
       reasoning: "AI validation unavailable, using ensemble confidence only",
       risks: ["API failure - manual review recommended"],
       opportunities: [],
-      quality: Math.round(ensemble.confidence * 100),
+      quality: Math.round((ensemble.confidence || 0.5) * 100),
       recommendations: "Verify setup manually before trading"
     };
   }
