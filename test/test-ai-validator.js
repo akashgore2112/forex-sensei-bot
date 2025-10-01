@@ -1,8 +1,6 @@
-// ============================================================================
-// 🧪 Phase 3 - Step 10.5: AI Validator Test
-// Runs full pipeline: MTFA → Ensemble → AI Validation
-// ============================================================================
-
+// test/test-ai-validator.js
+const path = require("path");
+const fs = require("fs");
 const MTFA = require("../mtfa");
 const SwingIndicators = require("../swing-indicators");
 const EnsemblePredictor = require("../ml-pipeline/prediction/ensemble-predictor");
@@ -16,30 +14,39 @@ async function testAIValidator() {
   console.log("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n");
 
   try {
-    // ✅ Step 1: Check API key
     if (!process.env.OPENAI_API_KEY) {
       throw new Error("❌ OPENAI_API_KEY not found in .env file");
     }
 
-    // ✅ Step 2: Run Phase 1 - MTFA
     console.log("📊 Fetching MTFA data...");
     const mtfaResult = await MTFA.analyze("EUR/USD");
     console.log("✅ MTFA complete\n");
 
-    // ✅ Step 3: Run Phase 2 - Ensemble
     console.log("🤖 Running ensemble prediction...");
     const indicators = await SwingIndicators.calculateAll(mtfaResult.dailyCandles);
     const ensemble = new EnsemblePredictor();
-    await ensemble.loadModels("./saved-models/v1"); // path adjust if needed
+    
+    // Find latest model version
+    const savedModelsPath = path.join(__dirname, "../saved-models");
+    const versions = fs.readdirSync(savedModelsPath)
+      .filter(f => f.startsWith("v") || f.startsWith("test_"))
+      .sort();
+    
+    if (versions.length === 0) {
+      throw new Error("No trained models found. Run test-trainer.js first.");
+    }
+
+    const modelPath = path.join(savedModelsPath, versions[versions.length - 1]);
+    console.log(`   Using models: ${versions[versions.length - 1]}`);
+    
+    await ensemble.loadModels(modelPath);
     const ensembleResult = await ensemble.predict(mtfaResult.dailyCandles, indicators);
     console.log("✅ Ensemble complete\n");
 
-    // ✅ Step 4: Run Phase 3 - AI Validation
-    console.log("🤖 Requesting AI validation...");
+    console.log("🤖 Requesting AI validation from GPT-4...");
     const aiValidator = new AIValidator();
     const aiValidation = await aiValidator.validate(ensembleResult, mtfaResult);
 
-    // ✅ Step 5: Show Results
     console.log("\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
     console.log("   AI VALIDATION RESULT");
     console.log("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n");
@@ -56,7 +63,6 @@ async function testAIValidator() {
   }
 }
 
-// Run directly if script is executed
 if (require.main === module) {
   testAIValidator()
     .then((result) => process.exit(result.success ? 0 : 1))
