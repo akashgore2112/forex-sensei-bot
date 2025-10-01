@@ -38,10 +38,10 @@ class EnsemblePredictor {
   async loadModels(modelPath) {
   console.log(`📂 Loading models from: ${modelPath}`);
 
-  // LSTM (TensorFlow model requires file:// and absolute path)
-  this.lstm = new LSTMPricePredictor();
-  const lstmPath = `file://${path.resolve(modelPath, "lstm-model")}`;
-  await this.lstm.loadModel(lstmPath);
+ // LSTM (TensorFlow model requires file:// and model.json)
+ this.lstm = new LSTMPricePredictor();
+ const lstmPath = `file://${path.resolve(modelPath, "lstm-model", "model.json")}`;
+ await this.lstm.loadModel(lstmPath);
 
   // Random Forest (simple JSON)
   this.randomForest = new SwingSignalClassifier();
