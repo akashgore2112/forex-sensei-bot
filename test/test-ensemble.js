@@ -1,4 +1,3 @@
-// test/test-ensemble.js
 // ============================================================================
 // 🧪 Step 9.4 - Ensemble Predictor Test
 // Runs full pipeline: MTFA → Indicators → Models → Ensemble → Formatter
@@ -32,9 +31,9 @@ async function runEnsembleTest() {
     const ensemble = new EnsemblePredictor();
     const formatter = new PredictionFormatter();
 
-    // Load trained models (adjust path if needed)
+    // Load trained models (LSTM + RF only)
     console.log("📂 Loading trained models...");
-    await ensemble.loadModels("./saved-models/v1");
+    await ensemble.loadModels("./saved-models/test_v2"); // adjust folder as per training
     console.log("✅ Models loaded\n");
 
     // Step 4: Run ensemble prediction
@@ -70,7 +69,7 @@ async function runEnsembleTest() {
   }
 }
 
-// Run directly if executed as script
+// Run directly
 if (require.main === module) {
   runEnsembleTest()
     .then((result) => process.exit(result.success ? 0 : 1))
