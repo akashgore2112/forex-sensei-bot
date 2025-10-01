@@ -1,7 +1,11 @@
+// test/test-ensemble.js
 // ============================================================================
-// 🧪 Step 9.4 - Ensemble Predictor Test
+// 🧪 Step 9.4 - Ensemble Predictor Test (Dynamic Version)
 // Runs full pipeline: MTFA → Indicators → Models → Ensemble → Formatter
 // ============================================================================
+
+const fs = require("fs");
+const path = require("path");
 
 const MTFA = require("../mtfa");
 const SwingIndicators = require("../swing-indicators");
@@ -27,13 +31,27 @@ async function runEnsembleTest() {
     const indicators = await SwingIndicators.calculateAll(candles);
     console.log("✅ Indicators calculated\n");
 
-    // Step 3: Initialize Ensemble
+    // Step 3: Initialize Ensemble + Formatter
     const ensemble = new EnsemblePredictor();
     const formatter = new PredictionFormatter();
 
-    // Load trained models
-    console.log("📂 Loading trained models...");
-    await ensemble.loadModels("./saved-models/v1");
+    // Dynamically detect latest model path (symlink "current" or latest folder)
+    let modelPath = path.join(__dirname, "../saved-models/current");
+    if (!fs.existsSync(modelPath)) {
+      // fallback: pick latest versioned folder
+      const savedModelsPath = path.join(__dirname, "../saved-models");
+      const versions = fs
+        .readdirSync(savedModelsPath)
+        .filter((f) => f.startsWith("v"))
+        .sort(); // ascending order
+      if (versions.length === 0) {
+        throw new Error("❌ No trained models found in saved-models/");
+      }
+      modelPath = path.join(savedModelsPath, versions[versions.length - 1]); // pick latest
+    }
+
+    console.log(`📂 Loading trained models from: ${modelPath}`);
+    await ensemble.loadModels(modelPath);
     console.log("✅ Models loaded\n");
 
     // Step 4: Run ensemble prediction
@@ -69,7 +87,7 @@ async function runEnsembleTest() {
   }
 }
 
-// Run directly
+// Run directly if executed as script
 if (require.main === module) {
   runEnsembleTest()
     .then((result) => process.exit(result.success ? 0 : 1))
