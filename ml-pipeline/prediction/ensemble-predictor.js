@@ -1,5 +1,6 @@
+// ml-pipeline/prediction/ensemble-predictor.js
 // ============================================================================
-// 🤝 Ensemble Predictor (Phase 2 - Step 9.1 - FIXED)
+// 🤝 Ensemble Predictor (Phase 2 - Step 9.1 - FINAL FIXED)
 // Combines predictions from LSTM, Random Forest, Volatility, and Regime models
 // ============================================================================
 
@@ -21,7 +22,7 @@ class EnsemblePredictor {
     this.volatilityPredictor = null;
     this.regimeClassifier = null;
 
-    // Model weights
+    // Model weights for ensemble
     this.weights = {
       lstm: 0.30,
       randomForest: 0.35,
@@ -33,26 +34,26 @@ class EnsemblePredictor {
   }
 
   // ==========================================================================
-  // Load trained models from saved directory (only LSTM & RF need loading)
+  // Load trained models (only LSTM & RF need loading)
   // ==========================================================================
   async loadModels(modelPath) {
-  console.log(`📂 Loading models from: ${modelPath}`);
+    console.log(`📂 Loading models from: ${modelPath}`);
 
- // LSTM (TensorFlow model requires file:// and model.json)
- this.lstm = new LSTMPricePredictor();
- const lstmPath = `file://${path.resolve(modelPath, "lstm-model", "model.json")}`;
- await this.lstm.loadModel(lstmPath);
+    // LSTM (TensorFlow format)
+    this.lstm = new LSTMPricePredictor();
+    const lstmPath = `file://${path.resolve(modelPath, "lstm-model", "model.json")}`;
+    await this.lstm.loadModel(lstmPath);
 
-  // Random Forest (simple JSON)
-  this.randomForest = new SwingSignalClassifier();
-  await this.randomForest.loadModel(path.join(modelPath, "rf-model.json"));
+    // Random Forest (simple JSON)
+    this.randomForest = new SwingSignalClassifier();
+    await this.randomForest.loadModel(path.join(modelPath, "rf-model.json"));
 
-  // Volatility & Regime (direct run, no loading)
-  this.volatilityPredictor = new VolatilityPredictor();
-  this.regimeClassifier = new RegimeClassifier();
+    // Volatility + Regime = statistical models (no training needed)
+    this.volatilityPredictor = new VolatilityPredictor();
+    this.regimeClassifier = new RegimeClassifier();
 
-  console.log("✅ Models initialized successfully!\n");
-}
+    console.log("✅ Models initialized successfully!\n");
+  }
 
   // ==========================================================================
   // Run predictions from all models
@@ -60,8 +61,8 @@ class EnsemblePredictor {
   async predict(candles, indicators) {
     console.log("🔮 Running ensemble predictions...");
 
-    const recentData = candles.slice(-60); // last 60 candles for LSTM
-    const currentData = candles[candles.length - 1]; // latest candle
+    const recentData = candles.slice(-60);         // last 60 candles for LSTM
+    const currentData = candles[candles.length-1]; // latest candle
 
     // Get predictions
     const lstmPrediction = await this.lstm.predict(recentData);
@@ -73,13 +74,10 @@ class EnsemblePredictor {
 
     // Combine signals
     const ensembleResult = this.combineSignals(
-      lstmPrediction,
-      rfPrediction,
-      volPrediction,
-      regimePrediction
+      lstmPrediction, rfPrediction, volPrediction, regimePrediction
     );
 
-    // Calculate ensemble confidence
+    // Confidence score
     ensembleResult.confidence = this.confidenceCalculator.calculate(
       ensembleResult,
       { lstmPrediction, rfPrediction, volPrediction, regimePrediction }
@@ -94,24 +92,24 @@ class EnsemblePredictor {
   combineSignals(lstm, rf, vol, regime) {
     const weightedScores = { BUY: 0, SELL: 0, HOLD: 0 };
 
-    // RF signal
+    // Random Forest → direct signal
     if (rf.signal) {
       weightedScores[rf.signal] += this.weights.randomForest * rf.confidence;
     }
 
-    // LSTM signal
+    // LSTM → bullish/bearish
     if (lstm.direction === "BULLISH") {
       weightedScores.BUY += this.weights.lstm * lstm.confidence;
     } else if (lstm.direction === "BEARISH") {
       weightedScores.SELL += this.weights.lstm * lstm.confidence;
     }
 
-    // Volatility adjustment
+    // Volatility → penalize if high
     if (vol.volatilityLevel === "HIGH") {
       weightedScores.HOLD += this.weights.volatility * 0.5;
     }
 
-    // Regime adjustment
+    // Regime → boost if matches context
     if (regime.classification === "TRENDING" && rf.signal !== "HOLD") {
       weightedScores[rf.signal] += this.weights.regime * regime.confidence;
     } else if (regime.classification === "RANGING" && rf.signal === "HOLD") {
