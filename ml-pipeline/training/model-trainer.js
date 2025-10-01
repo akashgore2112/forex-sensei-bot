@@ -1,13 +1,11 @@
 // ml-pipeline/training/model-trainer.js
 // ============================================================================
 // 🤖 Model Trainer (Phase 2 - Step 8.2) - FIXED
-// Role: Train only ML models (RF, LSTM). Statistical models don't train.
 // ============================================================================
 
 const fs = require("fs");
 const path = require("path");
 
-// Import ML Models (only these need training)
 const LSTMPricePredictor = require("../models/lstm-predictor");
 const SwingSignalClassifier = require("../models/random-forest-classifier");
 
@@ -17,15 +15,11 @@ class ModelTrainer {
     this.version = config.version || `v${Date.now()}`;
     this.saveModels = config.saveModels ?? true;
 
-    // Ensure base path exists
     if (!fs.existsSync(this.basePath)) {
       fs.mkdirSync(this.basePath, { recursive: true });
     }
   }
 
-  // ==========================================================================
-  // Train All ML Models (Not Statistical Models)
-  // ==========================================================================
   async trainAll(dataset, options = {}) {
     console.log(`\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`);
     console.log(`   TRAINING ALL ML MODELS [${this.version}]`);
@@ -33,7 +27,6 @@ class ModelTrainer {
 
     const results = {};
 
-    // Only train ML models (not statistical models)
     results.randomForest = await this.trainRandomForest(dataset, options);
     results.lstm = await this.trainLSTM(dataset, options);
 
@@ -41,104 +34,84 @@ class ModelTrainer {
     console.log("✅ All ML models trained successfully!");
     console.log("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n");
 
-    // Save training summary
     this._saveTrainingSummary(results);
 
     return results;
   }
 
-  // ==========================================================================
-  // Random Forest Classifier
-  // ==========================================================================
+  // ✅ FIXED: Use raw candles directly
   async trainRandomForest(dataset, options = {}) {
     console.log("🌲 Training Random Forest Classifier...");
 
-    if (!dataset.randomForest || !dataset.randomForest.X || dataset.randomForest.X.length === 0) {
-      throw new Error("❌ No Random Forest training data available");
+    if (!dataset.rawCandles || dataset.rawCandles.length === 0) {
+      throw new Error("❌ No raw candles available for Random Forest training");
     }
 
     const rf = new SwingSignalClassifier();
     
-    // Prepare data in format RF expects (candles with indicators)
-    const trainingData = [];
-    for (let i = 0; i < dataset.randomForest.X.length; i++) {
-      const features = dataset.randomForest.X[i];
-      
-      // Convert back to candle-like object
-      trainingData.push({
-        close: dataset.rawCandles[i]?.close || 0,
-        ema20: features[0] || 0,
-        ema50: features[1] || 0,
-        rsi: features[2] || 0,
-        macd: { macd: features[3] || 0 },
-        atr: features[4] || 0,
-        prevClose: i > 0 ? dataset.rawCandles[i - 1]?.close || 0 : 0,
-        volume: dataset.rawCandles[i]?.volume || 0,
-        avgVolume: dataset.rawCandles[i]?.volume || 1
-      });
-    }
-
+    // ✅ RF model has its own prepareFeatures() - just pass raw candles
+    const trainingData = dataset.rawCandles;
     const metrics = await rf.trainModel(trainingData);
 
-    // ✅ Ensure save directory exists
     const saveDir = path.join(this.basePath, this.version);
     if (!fs.existsSync(saveDir)) {
       fs.mkdirSync(saveDir, { recursive: true });
     }
 
-    // Save model
     const savePath = path.join(saveDir, "rf-model.json");
     await rf.saveModel(savePath);
 
     console.log(`   ✅ Random Forest trained`);
     console.log(`   📊 Accuracy: ${(metrics.accuracy * 100).toFixed(2)}%`);
+    console.log(`   📊 F1-Score: ${(metrics.averageF1 * 100).toFixed(2)}%`);
     console.log(`   💾 Saved to: ${savePath}\n`);
 
     return { success: true, path: savePath, metrics };
   }
 
-  // ==========================================================================
-  // LSTM Price Predictor
-  // ==========================================================================
+  // ✅ FIXED: Use raw candles directly
   async trainLSTM(dataset, options = {}) {
     console.log("🔮 Training LSTM Price Predictor...");
 
-    if (!dataset.lstm || !dataset.lstm.X || dataset.lstm.X.length === 0) {
-      throw new Error("❌ No LSTM sequence data available");
+    if (!dataset.rawCandles || dataset.rawCandles.length < 100) {
+      throw new Error("❌ Not enough candles for LSTM training");
     }
 
     const lstm = new LSTMPricePredictor();
     
-    // Build model first
     await lstm.buildModel();
 
-    // Prepare data in format LSTM expects
-    const trainingData = dataset.rawCandles.slice(0, dataset.lstm.X.length + 60);
-    
-    const metrics = await lstm.trainModel(trainingData);
+    // ✅ Pass raw candles - LSTM has its own prepareTrainingData()
+    const trainingData = dataset.rawCandles;
+    await lstm.trainModel(trainingData);
 
-    // ✅ Ensure save directory exists
     const saveDir = path.join(this.basePath, this.version);
     if (!fs.existsSync(saveDir)) {
       fs.mkdirSync(saveDir, { recursive: true });
     }
 
-    // Save model
     const savePath = path.join(saveDir, "lstm-model");
     await lstm.model.save(`file://${savePath}`);
 
+    const finalLoss = lstm.trainingHistory?.history?.loss?.slice(-1)[0];
+    const finalValLoss = lstm.trainingHistory?.history?.val_loss?.slice(-1)[0];
+
     console.log(`   ✅ LSTM trained`);
-    console.log(`   📊 Final loss: ${metrics?.history?.loss?.slice(-1)[0]?.toFixed(6) || "N/A"}`);
+    console.log(`   📊 Final Loss: ${finalLoss?.toFixed(6) || "N/A"}`);
+    console.log(`   📊 Val Loss: ${finalValLoss?.toFixed(6) || "N/A"}`);
     console.log(`   💾 Saved to: ${savePath}\n`);
 
-    return { success: true, path: savePath, metrics };
+    return { 
+      success: true, 
+      path: savePath, 
+      metrics: {
+        finalLoss,
+        finalValLoss
+      }
+    };
   }
 
-  // ==========================================================================
-  // Save Training Summary
-  // ==========================================================================
   _saveTrainingSummary(results) {
-    // ✅ Ensure save directory exists
     const saveDir = path.join(this.basePath, this.version);
     if (!fs.existsSync(saveDir)) {
       fs.mkdirSync(saveDir, { recursive: true });
@@ -147,7 +120,18 @@ class ModelTrainer {
     const summary = {
       version: this.version,
       trainedAt: new Date().toISOString(),
-      models: results
+      models: {
+        randomForest: {
+          success: results.randomForest.success,
+          accuracy: results.randomForest.metrics?.accuracy,
+          f1Score: results.randomForest.metrics?.averageF1
+        },
+        lstm: {
+          success: results.lstm.success,
+          finalLoss: results.lstm.metrics?.finalLoss,
+          finalValLoss: results.lstm.metrics?.finalValLoss
+        }
+      }
     };
 
     const summaryPath = path.join(saveDir, "training-summary.json");
