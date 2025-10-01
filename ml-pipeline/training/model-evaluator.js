@@ -1,18 +1,14 @@
-// ============================================================================
-// 📊 Model Evaluator (Phase 2 - Step 8.3)
-// Role: Centralized evaluation of classification + regression models
-// Author: Forex ML Pipeline
-// ============================================================================
-
+// ml-pipeline/training/model-evaluator.js
 class ModelEvaluator {
   constructor() {}
 
-  // ==========================================================================
-  // 📊 Classification Metrics
-  // ==========================================================================
   evaluateClassification(yTrue, yPred, labels = ["BUY", "SELL", "HOLD"]) {
+    // Validation
     if (!yTrue || !yPred || yTrue.length !== yPred.length) {
-      throw new Error("❌ Classification evaluation failed: yTrue and yPred length mismatch");
+      throw new Error("❌ yTrue and yPred length mismatch");
+    }
+    if (yTrue.length === 0) {
+      throw new Error("❌ Cannot evaluate empty arrays");
     }
 
     const confusionMatrix = {};
@@ -49,22 +45,27 @@ class ModelEvaluator {
           : 0;
     });
 
+    // Calculate macro-averaged F1
+    const f1Values = Object.values(f1Score);
+    const macroF1 = f1Values.reduce((a, b) => a + b, 0) / f1Values.length;
+
     return {
       type: "classification",
-      accuracy,
-      precision,
-      recall,
-      f1Score,
+      accuracy: Number(accuracy.toFixed(4)),
+      macroF1: Number(macroF1.toFixed(4)),
+      precision: this._formatMetrics(precision),
+      recall: this._formatMetrics(recall),
+      f1Score: this._formatMetrics(f1Score),
       confusionMatrix,
     };
   }
 
-  // ==========================================================================
-  // 📉 Regression Metrics
-  // ==========================================================================
   evaluateRegression(yTrue, yPred) {
     if (!yTrue || !yPred || yTrue.length !== yPred.length) {
-      throw new Error("❌ Regression evaluation failed: yTrue and yPred length mismatch");
+      throw new Error("❌ yTrue and yPred length mismatch");
+    }
+    if (yTrue.length === 0) {
+      throw new Error("❌ Cannot evaluate empty arrays");
     }
 
     const n = yTrue.length;
@@ -77,15 +78,23 @@ class ModelEvaluator {
     const meanY = yTrue.reduce((a, b) => a + b, 0) / n;
     const ssRes = residuals.reduce((a, b) => a + b * b, 0);
     const ssTot = yTrue.reduce((a, y) => a + Math.pow(y - meanY, 2), 0);
-    const r2 = 1 - ssRes / ssTot;
+    const r2 = ssTot > 0 ? 1 - ssRes / ssTot : 0;
 
     return {
       type: "regression",
-      mae,
-      rmse,
-      mape,
-      r2,
+      mae: Number(mae.toFixed(6)),
+      rmse: Number(rmse.toFixed(6)),
+      mape: Number((mape * 100).toFixed(2)), // Convert to percentage
+      r2: Number(r2.toFixed(4)),
     };
+  }
+
+  _formatMetrics(metricsObj) {
+    const formatted = {};
+    for (const [key, value] of Object.entries(metricsObj)) {
+      formatted[key] = Number(value.toFixed(4));
+    }
+    return formatted;
   }
 }
 
