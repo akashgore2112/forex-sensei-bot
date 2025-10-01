@@ -1,8 +1,4 @@
 // test/test-trainer.js
-// ============================================================================
-// 🧪 Model Trainer Test - Complete
-// ============================================================================
-
 const MTFA = require("../mtfa");
 const SwingIndicators = require("../swing-indicators");
 const FeatureGenerator = require("../ml-pipeline/feature-engineering/feature-generator");
@@ -35,7 +31,7 @@ async function runTrainerTest() {
 
     // Step 4: Train models
     console.log("🤖 Starting model training...\n");
-    const trainer = new ModelTrainer({ version: "test_v1" });
+    const trainer = new ModelTrainer({ version: "test_v2" });
     const results = await trainer.trainAll(dataset);
 
     // Display results
@@ -45,18 +41,21 @@ async function runTrainerTest() {
 
     console.log("🌲 Random Forest:");
     console.log(`   ✅ Success: ${results.randomForest.success}`);
-    console.log(`   📊 Accuracy: ${(results.randomForest.metrics.accuracy * 100).toFixed(2)}%`);
-    console.log(`   📊 F1-Score: ${(results.randomForest.metrics.averageF1 * 100).toFixed(2)}%`);
+    console.log(`   📊 Training Accuracy: ${(results.randomForest.trainingMetrics.accuracy * 100).toFixed(2)}%`);
+    console.log(`   📊 Test Accuracy: ${(results.randomForest.testMetrics.accuracy * 100).toFixed(2)}%`);
+    console.log(`   📊 Test Macro F1: ${(results.randomForest.testMetrics.macroF1 * 100).toFixed(2)}%`);
     console.log(`   💾 Path: ${results.randomForest.path}`);
 
     console.log("\n🔮 LSTM:");
     console.log(`   ✅ Success: ${results.lstm.success}`);
-    console.log(`   📊 Final Loss: ${results.lstm.metrics.finalLoss?.toFixed(6) || "N/A"}`);
-    console.log(`   📊 Val Loss: ${results.lstm.metrics.finalValLoss?.toFixed(6) || "N/A"}`);
+    console.log(`   📊 Training Loss: ${results.lstm.trainingMetrics.finalLoss?.toFixed(6) || "N/A"}`);
+    console.log(`   📊 Val Loss: ${results.lstm.trainingMetrics.finalValLoss?.toFixed(6) || "N/A"}`);
+    console.log(`   📊 Test MAE: ${results.lstm.testMetrics.mae?.toFixed(6) || "N/A"}`);
+    console.log(`   📊 Test RMSE: ${results.lstm.testMetrics.rmse?.toFixed(6) || "N/A"}`);
     console.log(`   💾 Path: ${results.lstm.path}`);
 
     console.log("\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
-    console.log("✅ All models trained and saved successfully!");
+    console.log("✅ All models trained and evaluated successfully!");
     console.log("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n");
 
     return { success: true, results };
