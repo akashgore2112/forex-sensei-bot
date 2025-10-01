@@ -35,19 +35,18 @@ async function runEnsembleTest() {
     const ensemble = new EnsemblePredictor();
     const formatter = new PredictionFormatter();
 
-    // Dynamically detect latest model path (symlink "current" or latest folder)
+    // Dynamically detect latest model path (symlink "current" or latest vN folder)
     let modelPath = path.join(__dirname, "../saved-models/current");
     if (!fs.existsSync(modelPath)) {
-      // fallback: pick latest versioned folder
       const savedModelsPath = path.join(__dirname, "../saved-models");
       const versions = fs
         .readdirSync(savedModelsPath)
         .filter((f) => f.startsWith("v"))
-        .sort(); // ascending order
+        .sort();
       if (versions.length === 0) {
         throw new Error("❌ No trained models found in saved-models/");
       }
-      modelPath = path.join(savedModelsPath, versions[versions.length - 1]); // pick latest
+      modelPath = path.join(savedModelsPath, versions[versions.length - 1]);
     }
 
     console.log(`📂 Loading trained models from: ${modelPath}`);
