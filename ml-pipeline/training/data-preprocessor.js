@@ -1,6 +1,6 @@
 // ml-pipeline/training/data-preprocessor.js
 // ============================================================================
-// 📊 Data Preprocessor (Phase 2 - Step 8.1) - FIXED (Improved Normalization + Feature Alignment)
+// 📊 Data Preprocessor (Phase 2 - Step 8.1) - CLEANED
 // ============================================================================
 
 const math = require("mathjs");
@@ -13,15 +13,12 @@ class DataPreprocessor {
     this.splitRatio = config.splitRatio || { train: 0.7, val: 0.15, test: 0.15 };
   }
 
-  // ==========================================================================
-  // Feature Generation (per candle, not global copy)
-  // ==========================================================================
+  // ✅ FIXED: Removed unused candleSlice variable
   generateFeatures(candles, indicators, featureGenerator) {
     console.log("⚙️ Generating features from raw data...");
 
     const featureArray = [];
     for (let i = 100; i < candles.length; i++) {
-      const candleSlice = candles.slice(0, i + 1); // progressive slice
       const features = featureGenerator.generateAllFeatures(candles, indicators);
       featureArray.push(features);
     }
@@ -32,16 +29,12 @@ class DataPreprocessor {
     return { candles: alignedCandles, features: featureArray };
   }
 
-  // ==========================================================================
-  // Normalization
-  // ==========================================================================
   normalize(featuresArray, method = this.normalizationMethod) {
     if (!featuresArray || featuresArray.length === 0) return [];
 
     const normalized = [];
     const keys = Object.keys(featuresArray[0]);
 
-    // Calculate stats for each feature
     const stats = {};
     for (const key of keys) {
       const series = featuresArray.map(f => f[key] ?? 0).filter(v => Number.isFinite(v));
@@ -53,7 +46,6 @@ class DataPreprocessor {
       };
     }
 
-    // Normalize each sample
     for (let i = 0; i < featuresArray.length; i++) {
       const normalizedSample = {};
       for (const key of keys) {
@@ -72,9 +64,6 @@ class DataPreprocessor {
     return normalized;
   }
 
-  // ==========================================================================
-  // Label Generation
-  // ==========================================================================
   generateLabels(candles) {
     const labels = [];
     for (let i = 0; i < candles.length - this.predictionHorizon; i++) {
@@ -91,9 +80,6 @@ class DataPreprocessor {
     return labels;
   }
 
-  // ==========================================================================
-  // Dataset Split
-  // ==========================================================================
   splitData(features, labels) {
     const total = Math.min(features.length, labels.length);
     const trainEnd = Math.floor(total * this.splitRatio.train);
@@ -113,9 +99,6 @@ class DataPreprocessor {
     };
   }
 
-  // ==========================================================================
-  // LSTM Sequence Creation
-  // ==========================================================================
   createSequences(features, candles) {
     const sequences = [];
     const targets = [];
@@ -134,18 +117,12 @@ class DataPreprocessor {
     return { X: sequences, Y: targets };
   }
 
-  // ==========================================================================
-  // Random Forest Dataset
-  // ==========================================================================
   prepareForRandomForest(features, labels) {
     const X = features.map(f => Object.values(f));
     const y = labels.map(label => (label === "BUY" ? 0 : label === "SELL" ? 1 : 2));
     return { X, y };
   }
 
-  // ==========================================================================
-  // Main Preprocessing Pipeline
-  // ==========================================================================
   preprocess(candles, indicators, featureGenerator) {
     console.log("\n🚀 Starting data preprocessing pipeline...\n");
 
