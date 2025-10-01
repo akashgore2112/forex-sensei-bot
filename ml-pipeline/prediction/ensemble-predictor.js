@@ -51,7 +51,6 @@ class EnsemblePredictor {
       throw new Error("Need at least 100 candles for prediction");
     }
 
-    // Merge indicators into ALL candles (LSTM needs last 60 with indicators)
     const candlesWithIndicators = candles.map((candle, i) => ({
       ...candle,
       ema20: indicators.ema20[i] || 0,
@@ -68,7 +67,6 @@ class EnsemblePredictor {
     const recentData = candlesWithIndicators.slice(-60);
     const currentData = candlesWithIndicators[candlesWithIndicators.length - 1];
 
-    // Get predictions
     console.log("   🔮 LSTM prediction...");
     const lstmPrediction = await this.lstm.predict(recentData);
 
@@ -76,19 +74,17 @@ class EnsemblePredictor {
     const rfPrediction = this.randomForest.predict(currentData);
 
     console.log("   📊 Volatility prediction...");
-    const volPrediction = this.volatilityPredictor.predict(candles);
+    const volPrediction = this.volatilityPredictor.predict(candlesWithIndicators);
 
     console.log("   🎯 Regime classification...");
-    const regimePrediction = this.regimeClassifier.classifyRegime(candles, indicators);
+    const regimePrediction = this.regimeClassifier.classifyRegime(candlesWithIndicators, indicators);
 
     console.log("✅ All predictions collected");
 
-    // Combine signals
     const ensembleResult = this.combineSignals(
       lstmPrediction, rfPrediction, volPrediction, regimePrediction
     );
 
-    // Calculate confidence
     const confidenceResult = this.confidenceCalculator.calculate(
       ensembleResult,
       {
@@ -119,12 +115,10 @@ class EnsemblePredictor {
   combineSignals(lstm, rf, vol, regime) {
     const weightedScores = { BUY: 0, SELL: 0, HOLD: 0 };
 
-    // Random Forest
     if (rf.signal) {
       weightedScores[rf.signal] += this.weights.randomForest * rf.confidence;
     }
 
-    // LSTM
     if (lstm.direction === "BULLISH") {
       weightedScores.BUY += this.weights.lstm * lstm.confidence;
     } else if (lstm.direction === "BEARISH") {
@@ -133,12 +127,10 @@ class EnsemblePredictor {
       weightedScores.HOLD += this.weights.lstm * lstm.confidence;
     }
 
-    // Volatility penalty
     if (vol.volatilityLevel === "HIGH") {
       weightedScores.HOLD += this.weights.volatility * 0.6;
     }
 
-    // Regime boost
     if (regime.classification === "TRENDING") {
       if (rf.signal === "BUY") weightedScores.BUY += this.weights.regime * regime.confidence;
       if (rf.signal === "SELL") weightedScores.SELL += this.weights.regime * regime.confidence;
