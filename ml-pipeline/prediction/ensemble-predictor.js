@@ -36,22 +36,23 @@ class EnsemblePredictor {
   // Load trained models from saved directory (only LSTM & RF need loading)
   // ==========================================================================
   async loadModels(modelPath) {
-    console.log(`📂 Loading models from: ${modelPath}`);
+  console.log(`📂 Loading models from: ${modelPath}`);
 
-    // Load LSTM model
-    this.lstm = new LSTMPricePredictor();
-    await this.lstm.loadModel(path.join(modelPath, "lstm-model"));
+  // LSTM (TensorFlow model requires file:// and absolute path)
+  this.lstm = new LSTMPricePredictor();
+  const lstmPath = `file://${path.resolve(modelPath, "lstm-model")}`;
+  await this.lstm.loadModel(lstmPath);
 
-    // Load Random Forest model
-    this.randomForest = new SwingSignalClassifier();
-    await this.randomForest.loadModel(path.join(modelPath, "rf-model.json"));
+  // Random Forest (simple JSON)
+  this.randomForest = new SwingSignalClassifier();
+  await this.randomForest.loadModel(path.join(modelPath, "rf-model.json"));
 
-    // Initialize Volatility & Regime (no load required)
-    this.volatilityPredictor = new VolatilityPredictor();
-    this.regimeClassifier = new RegimeClassifier();
+  // Volatility & Regime (direct run, no loading)
+  this.volatilityPredictor = new VolatilityPredictor();
+  this.regimeClassifier = new RegimeClassifier();
 
-    console.log("✅ Models initialized successfully!\n");
-  }
+  console.log("✅ Models initialized successfully!\n");
+}
 
   // ==========================================================================
   // Run predictions from all models
