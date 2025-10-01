@@ -5,12 +5,13 @@ const MTFA = require("../mtfa");
 const SwingIndicators = require("../swing-indicators");
 const EnsemblePredictor = require("../ml-pipeline/prediction/ensemble-predictor");
 const AIValidator = require("../ai-validation/ai-validator");
+const MarketContext = require("../ai-validation/market-context"); // ✅ Step 11 added
 require("dotenv").config();
 
 async function testAIValidator() {
   console.log("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
-  console.log("   PHASE 3 - STEP 10 TEST");
-  console.log("   AI VALIDATOR");
+  console.log("   PHASE 3 - STEP 10 + 11 TEST");
+  console.log("   AI VALIDATOR with Market Context");
   console.log("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n");
 
   try {
@@ -43,12 +44,18 @@ async function testAIValidator() {
     const ensembleResult = await ensemble.predict(mtfaResult.dailyCandles, indicators);
     console.log("✅ Ensemble complete\n");
 
+    // ✅ Step 11: Market Context Analysis
+    console.log("📊 Analyzing market context...");
+    const marketContext = new MarketContext();
+    const context = marketContext.analyze(mtfaResult.dailyCandles, indicators, ensembleResult);
+    console.log("✅ Market context analyzed\n");
+
     console.log("🤖 Requesting AI validation from GPT-4...");
     const aiValidator = new AIValidator();
-    const aiValidation = await aiValidator.validate(ensembleResult, mtfaResult);
+    const aiValidation = await aiValidator.validate(ensembleResult, mtfaResult, context);
 
     console.log("\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
-    console.log("   AI VALIDATION RESULT");
+    console.log("   AI VALIDATION RESULT (with Context)");
     console.log("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n");
     console.log(JSON.stringify(aiValidation, null, 2));
     console.log("\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
