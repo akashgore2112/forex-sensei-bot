@@ -1,4 +1,8 @@
 // test/test-trainer.js
+// ============================================================================
+// 🧪 Model Trainer Test - Complete
+// ============================================================================
+
 const MTFA = require("../mtfa");
 const SwingIndicators = require("../swing-indicators");
 const FeatureGenerator = require("../ml-pipeline/feature-engineering/feature-generator");
@@ -30,25 +34,32 @@ async function runTrainerTest() {
     console.log("✅ Data preprocessed\n");
 
     // Step 4: Train models
-    console.log("🤖 Training ML models...");
+    console.log("🤖 Starting model training...\n");
     const trainer = new ModelTrainer({ version: "test_v1" });
     const results = await trainer.trainAll(dataset);
 
+    // Display results
     console.log("\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
-    console.log("   TRAINING RESULTS");
+    console.log("   TRAINING RESULTS SUMMARY");
     console.log("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n");
 
     console.log("🌲 Random Forest:");
-    console.log(`   Success: ${results.randomForest.success}`);
-    console.log(`   Path: ${results.randomForest.path}`);
-    console.log(`   Accuracy: ${(results.randomForest.metrics.accuracy * 100).toFixed(2)}%`);
+    console.log(`   ✅ Success: ${results.randomForest.success}`);
+    console.log(`   📊 Accuracy: ${(results.randomForest.metrics.accuracy * 100).toFixed(2)}%`);
+    console.log(`   📊 F1-Score: ${(results.randomForest.metrics.averageF1 * 100).toFixed(2)}%`);
+    console.log(`   💾 Path: ${results.randomForest.path}`);
 
     console.log("\n🔮 LSTM:");
-    console.log(`   Success: ${results.lstm.success}`);
-    console.log(`   Path: ${results.lstm.path}`);
+    console.log(`   ✅ Success: ${results.lstm.success}`);
+    console.log(`   📊 Final Loss: ${results.lstm.metrics.finalLoss?.toFixed(6) || "N/A"}`);
+    console.log(`   📊 Val Loss: ${results.lstm.metrics.finalValLoss?.toFixed(6) || "N/A"}`);
+    console.log(`   💾 Path: ${results.lstm.path}`);
 
-    console.log("\n✅ All models trained successfully!");
-    return { success: true };
+    console.log("\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
+    console.log("✅ All models trained and saved successfully!");
+    console.log("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n");
+
+    return { success: true, results };
 
   } catch (err) {
     console.error("\n❌ ERROR:", err.message);
