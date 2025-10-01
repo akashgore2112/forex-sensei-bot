@@ -31,9 +31,9 @@ async function runEnsembleTest() {
     const ensemble = new EnsemblePredictor();
     const formatter = new PredictionFormatter();
 
-    // Load trained models (LSTM + RF only)
+    // Load trained models
     console.log("📂 Loading trained models...");
-    await ensemble.loadModels("./saved-models/test_v2"); // adjust folder as per training
+    await ensemble.loadModels("./saved-models/v1");
     console.log("✅ Models loaded\n");
 
     // Step 4: Run ensemble prediction
