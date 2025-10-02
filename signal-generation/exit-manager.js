@@ -2,20 +2,30 @@
 class ExitManager {
   constructor(config = {}) {
     this.useTrailingStop = config.useTrailingStop || false;
-    this.trailingDistance = config.trailingDistance || 0.0015; // 15 pips
+    this.trailingDistance = config.trailingDistance || 0.0015;
     this.partialTakeProfit = config.partialTakeProfit || false;
   }
 
-  /**
-   * Calculate exit strategy
-   */
   calculateExits(signal, ensemble) {
     const { entry, stopLoss, target } = signal.tradingParams;
     const direction = signal.signal;
-    const atr = ensemble.models.volatility.currentVolatility;
 
     console.log("\n📍 [ExitManager] Calculating exits...");
+
+    // Handle NO_SIGNAL case
+    if (direction === "NO_SIGNAL" || !entry || !stopLoss || !target) {
+      console.log("   ⚠️ NO_SIGNAL or invalid params - skipping exit calculation");
+      return {
+        stopLoss: { type: "NONE", price: null, distance: 0, conditions: [] },
+        takeProfit: { type: "NONE", price: null, distance: 0, conditions: [] },
+        trailingStop: null,
+        partialTP: null
+      };
+    }
+
     console.log(`   Entry: ${entry}, StopLoss: ${stopLoss}, Target: ${target}`);
+
+    const atr = ensemble.models.volatility.currentVolatility;
 
     const exits = {
       stopLoss: {
@@ -32,12 +42,10 @@ class ExitManager {
       }
     };
 
-    // Trailing Stop
     if (this.useTrailingStop) {
       exits.trailingStop = this.calculateTrailingStop(direction, entry, atr);
     }
 
-    // Partial TP
     if (this.partialTakeProfit) {
       exits.partialTP = this.calculatePartialTP(entry, target, direction);
     }
