@@ -12,6 +12,7 @@ const QualityScorer = require("../quality-control/quality-scorer");
 const FinalApproval = require("../quality-control/final-approval");
 const SignalGenerator = require("../signal-generation/signal-generator");
 const TradeSimulator = require("./trade-simulator");
+const SignalReplay = require("./signal-replay"); // ✅ Added
 
 class BacktestRunner {
   constructor(config = {}) {
@@ -23,24 +24,27 @@ class BacktestRunner {
       startBalance: this.startBalance,
       riskPerTrade: this.riskPerTrade
     });
+
+    this.signalReplay = new SignalReplay(); // ✅ Initialize replay
   }
 
   /**
-   * Run backtest on historical candles
-   * @param {Array} historicalCandles
+   * Run backtest on historical data
+   * @param {Array} historicalCandles - Full historical dataset
    */
   async runBacktest(historicalCandles) {
     console.log("\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
     console.log("   PHASE 7: BACKTESTING");
     console.log("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n");
+
     console.log(`Starting backtest with ${historicalCandles.length} candles`);
     console.log(`Initial Balance: $${this.startBalance}`);
     console.log(`Risk per Trade: ${this.riskPerTrade}%\n`);
 
     const trades = [];
-    const windowSize = 100; // need 100 candles for MTFA & indicators
+    const windowSize = 100; // Need 100 candles for MTFA + indicators
 
-    // Load ML models once
+    // Load models once
     const ensemble = new EnsemblePredictor();
     const fs = require("fs");
     const path = require("path");
@@ -57,8 +61,8 @@ class BacktestRunner {
     const validator = new SignalValidator();
     const scorer = new QualityScorer();
     const approval = new FinalApproval();
-    const signalGenerator = new SignalGenerator({
-      position: { accountBalance: this.startBalance, riskPercentage: this.riskPerTrade }
+    const signalGenerator = new SignalGenerator({ 
+      position: { accountBalance: this.startBalance, riskPercentage: this.riskPerTrade } 
     });
 
     // Rolling window backtest
@@ -67,7 +71,7 @@ class BacktestRunner {
       const currentCandle = currentWindow[currentWindow.length - 1];
 
       try {
-        // Phase 1: Indicators
+        // Run complete pipeline (Phases 1-5)
         const indicators = await SwingIndicators.calculateAll(currentWindow);
 
         const mtfaResult = {
@@ -78,14 +82,11 @@ class BacktestRunner {
           daily: { indicators }
         };
 
-        // Phase 2: Ensemble predictions
         const ensembleResult = await ensemble.predict(currentWindow, indicators);
 
-        // Phase 3: Market context
         const marketContext = new MarketContext();
         const context = marketContext.analyze(currentWindow, indicators, ensembleResult);
 
-        // AI validation (optional for speed)
         let aiValidation;
         if (this.useAIValidation) {
           aiValidation = await aiValidator.validate(ensembleResult, mtfaResult, context);
@@ -93,7 +94,7 @@ class BacktestRunner {
           aiValidation = {
             validation: ensembleResult.confidence > 0.6 ? "APPROVE" : "REJECT",
             aiConfidence: ensembleResult.confidence,
-            reasoning: "Backtest mode - AI skipped",
+            reasoning: "Backtesting mode - AI skipped",
             risks: [],
             opportunities: [],
             quality: Math.round(ensembleResult.confidence * 100),
@@ -101,42 +102,49 @@ class BacktestRunner {
           };
         }
 
-        // Phase 3: Decision
         const finalDecision = decisionEngine.makeDecision(mtfaResult, ensembleResult, aiValidation, context);
-
-        // Phase 3.5: Compose signal
         const signal = signalComposer.compose(finalDecision, mtfaResult, ensembleResult, aiValidation, context);
 
-        // Phase 4: Quality Control
+        // Quality Control
         const filterResults = filterEngine.runFilters(signal, mtfaResult, ensembleResult);
         const validationResult = validator.validate(signal);
         const qualityScore = scorer.calculateScore(signal, filterResults, validationResult);
         const finalApproval = approval.approve(signal, filterResults, validationResult, qualityScore);
 
-        if (!finalApproval.approved) continue; // Skip bad signals
+        if (!finalApproval.approved) {
+          continue; // Skip rejected signals
+        }
 
-        // Phase 5: Signal Generation
+        // Generate trading signal
         const tradingSignal = signalGenerator.generate(signal, mtfaResult, ensembleResult, qualityScore);
 
         if (tradingSignal.direction !== "NO_SIGNAL") {
-          // Simulate trade execution
+          // ✅ Replay signal before simulation (debugging check)
+          const replayResult = this.signalReplay.replay(
+            tradingSignal,
+            historicalCandles.slice(i + 1, i + 20)
+          );
+          console.log(`Replay Outcome: ${replayResult.outcome}`);
+
+          // ✅ Simulate trade execution
           const trade = this.tradeSimulator.executeTrade(
             tradingSignal,
             currentCandle,
-            historicalCandles.slice(i + 1, i + 20) // Next 20 candles for trade outcome
+            historicalCandles.slice(i + 1, i + 20)
           );
 
           if (trade) {
             trades.push(trade);
-            console.log(`Trade #${trades.length}: ${trade.direction} at ${currentCandle.time} → ${trade.outcome}`);
+            console.log(`Trade #${trades.length}: ${trade.direction} at ${currentCandle.time} - ${trade.outcome}`);
           }
         }
-      } catch (err) {
-        console.error(`Error at candle ${i}:`, err.message);
+
+      } catch (error) {
+        console.error(`Error at candle ${i}:`, error.message);
         continue;
       }
 
-      // Progress every 100 candles
+      // Progress update
       if (i % 100 === 0) {
         console.log(`Progress: ${i}/${historicalCandles.length} candles processed`);
       }
