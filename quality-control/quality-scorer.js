@@ -1,11 +1,5 @@
 // quality-control/quality-scorer.js
 class QualityScorer {
-  /**
-   * Calculate final quality score (0-100)
-   * @param {Object} signal - Final composed signal
-   * @param {Object} filterResults - Results from Step 13
-   * @param {Object} validationResult - Results from Step 14
-   */
   calculateScore(signal, filterResults, validationResult) {
     console.log("\n⭐ Calculating quality score...");
 
@@ -15,9 +9,16 @@ class QualityScorer {
     score += signal.confidence * 40;
 
     // 2. Filter Pass Rate (30 points)
-    const filtersPassed = filterResults.results.filter(r => r.passed).length;
-    const totalFilters = filterResults.results.length;
-    score += (filtersPassed / totalFilters) * 30;
+    const filtersPassed = filterResults.results?.filter(r => r.passed).length || 0;
+    const totalFilters = filterResults.results?.length || 0;
+    
+    // Fix: Avoid division by zero
+    if (totalFilters > 0) {
+      score += (filtersPassed / totalFilters) * 30;
+    } else {
+      // No filters ran (e.g., NO_SIGNAL) - give 0 points
+      score += 0;
+    }
 
     // 3. MTFA Alignment (15 points)
     const mtfaScore = this.getMTFAScore(signal);
@@ -29,7 +30,7 @@ class QualityScorer {
 
     // Penalties
     if (validationResult.warnings.length > 0) {
-      score -= validationResult.warnings.length * 2; // -2 per warning
+      score -= validationResult.warnings.length * 2;
     }
 
     // Clamp 0-100
@@ -42,7 +43,7 @@ class QualityScorer {
       grade: this.getGrade(score),
       breakdown: {
         confidence: signal.confidence * 40,
-        filters: (filtersPassed / totalFilters) * 30,
+        filters: totalFilters > 0 ? (filtersPassed / totalFilters) * 30 : 0,
         mtfa: mtfaScore * 15,
         riskReward: rrScore * 15
       }
@@ -52,13 +53,12 @@ class QualityScorer {
   getMTFAScore(signal) {
     const alignment = signal.metadata?.mtfaBias;
     if (!alignment) return 0.5;
-    // All 3 aligned = 1.0, partial = 0.66, else 0
-    return 1.0; // Simplified for now
+    return 1.0;
   }
 
   getRRScore(signal) {
-    const rr = signal.tradingParams.riskReward;
-    if (!rr) return 0;
+    const rr = signal.tradingParams?.riskReward;
+    if (!rr || rr === null) return 0;
     if (rr >= 3) return 1.0;
     if (rr >= 2) return 0.8;
     if (rr >= 1.5) return 0.6;
