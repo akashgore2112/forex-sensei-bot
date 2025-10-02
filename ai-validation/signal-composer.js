@@ -10,24 +10,20 @@ class SignalComposer {
       signal: finalDecision.decision,
       confidence: Number(finalDecision.finalConfidence.toFixed(2)),
 
-      // === ANALYSIS BREAKDOWN ===
       analysis: {
         phase1_technical: this.formatTechnical(mtfa, finalDecision.breakdown.technical),
         phase2_ml: this.formatML(ensemble, finalDecision.breakdown.ml),
         phase3_ai: this.formatAI(aiValidation, finalDecision.breakdown.ai)
       },
 
-      // === MARKET CONTEXT ===
       marketContext: this.formatMarketContext(marketContext),
 
-      // === TRADING PARAMETERS ===
       tradingParams: this.calculateTradingParams(
         finalDecision.decision,
         currentPrice,
         ensemble.models
       ),
 
-      // === REASONING ===
       reasoning: {
         final: finalDecision.reasoning,
         ai: aiValidation.reasoning,
@@ -35,7 +31,6 @@ class SignalComposer {
         opportunities: aiValidation.opportunities
       },
 
-      // === METADATA ===
       metadata: {
         phaseScores: finalDecision.breakdown,
         mtfaBias: mtfa.overallBias,
@@ -107,11 +102,11 @@ class SignalComposer {
     let stopLoss, target;
 
     if (signal === "BUY") {
-      stopLoss = entry - atr * 1.5;
-      target = entry + atr * 3.5;
+      stopLoss = entry - atr * 2.5;  // CHANGED: 1.5 → 2.5 (wider SL)
+      target = entry + atr * 5.0;    // CHANGED: 3.5 → 5.0 (wider TP)
     } else {
-      stopLoss = entry + atr * 1.5;
-      target = entry - atr * 3.5;
+      stopLoss = entry + atr * 2.5;  // CHANGED: 1.5 → 2.5
+      target = entry - atr * 5.0;    // CHANGED: 3.5 → 5.0
     }
 
     const risk = Math.abs(entry - stopLoss);
