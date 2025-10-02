@@ -3,7 +3,7 @@ module.exports = {
   filters: {
     mtfaAlignment: {
       minAlignment: 1,
-      blocking: false  // CHANGED: true → false (warning only)
+      blocking: true  // CHANGED: false → true (block misaligned trades)
     },
     riskReward: {
       minRR: 1.5,
