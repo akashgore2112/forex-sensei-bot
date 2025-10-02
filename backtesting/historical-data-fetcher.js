@@ -3,7 +3,7 @@ const SwingDataFetcher = require('../swingDataFetcher');
 
 class HistoricalDataFetcher {
   constructor() {
-    this.swingFetcher = new SwingDataFetcher();
+    // No instance needed - SwingDataFetcher uses static methods
   }
 
   /**
@@ -15,33 +15,29 @@ class HistoricalDataFetcher {
     console.log(`\n📥 Fetching ${yearsBack} years of historical data for ${symbol}...`);
 
     try {
-      const pair = symbol.replace("/", ""); // EUR/USD → EURUSD
-
-      // Fetch daily data using existing Phase 1 swingDataFetcher
-      const dailyData = await this.swingFetcher.fetchDailyCandles(pair);
+      // Use existing Phase 1 SwingDataFetcher (includes caching & rate limiting)
+      const dailyData = await SwingDataFetcher.getDailyData(symbol);
 
       if (!dailyData || dailyData.length === 0) {
         throw new Error("Failed to fetch historical data");
       }
 
-      console.log(`✅ Fetched ${dailyData.length} total candles`);
+      console.log(`✅ Fetched ${dailyData.length} total candles from Alpha Vantage`);
 
       // Filter to last N years
       const cutoffDate = new Date();
       cutoffDate.setFullYear(cutoffDate.getFullYear() - yearsBack);
 
       const filtered = dailyData.filter(candle => {
-        const candleDate = new Date(candle.time || candle.date || candle.timestamp);
+        const candleDate = new Date(candle.timestamp);
         return candleDate >= cutoffDate;
       });
 
       console.log(`✅ Filtered to ${filtered.length} candles from last ${yearsBack} years`);
 
-      // Sort by date (oldest first)
+      // Sort by date (oldest first) for backtesting
       filtered.sort((a, b) => {
-        const dateA = new Date(a.time || a.date || a.timestamp);
-        const dateB = new Date(b.time || b.date || b.timestamp);
-        return dateA - dateB;
+        return new Date(a.timestamp) - new Date(b.timestamp);
       });
 
       return filtered;
@@ -53,7 +49,7 @@ class HistoricalDataFetcher {
   }
 
   /**
-   * Split data into rolling windows
+   * Split data into rolling windows for backtesting
    */
   splitIntoWindows(data, windowSize = 100) {
     const windows = [];
