@@ -34,6 +34,27 @@ class BacktestRunner {
       approved: 0
     };
   }
+  calculateMTFABias(candles, indicators) {
+  // Calculate bias from EMA crossover
+  const ema20Last = indicators.ema20[indicators.ema20.length - 1];
+  const ema50Last = indicators.ema50[indicators.ema50.length - 1];
+  
+  let bias = "NEUTRAL";
+  if (ema20Last > ema50Last) bias = "BULLISH";
+  else if (ema20Last < ema50Last) bias = "BEARISH";
+
+  return {
+    dailyCandles: candles,
+    biases: { 
+      daily: bias, 
+      weekly: bias,  // Simplified: use same bias
+      monthly: bias 
+    },
+    overallBias: bias,
+    confidence: 75,
+    daily: { indicators }
+  };
+}
 
   async runBacktest(historicalCandles) {
     console.log("\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
@@ -85,15 +106,17 @@ class BacktestRunner {
         // Phase 1 & 2: Indicators + Ensemble
         const indicators = await SwingIndicators.calculateAll(currentWindow);
         
-        const mtfaResult = {
-          dailyCandles: currentWindow,
-          biases: { daily: "BULLISH", weekly: "BULLISH", monthly: "BULLISH" },
-          overallBias: "BULLISH",
-          confidence: 85,
-          daily: { indicators }
-        };
+        // OLD (wrong):
+       const mtfaResult = {
+       dailyCandles: currentWindow,
+       biases: { daily: "BULLISH", weekly: "BULLISH", monthly: "BULLISH" },
+       overallBias: "BULLISH",
+       confidence: 85,
+       daily: { indicators }
+       };
 
-        const ensembleResult = await ensemble.predict(currentWindow, indicators);
+         // NEW (correct):
+        const mtfaResult = this.calculateMTFABias(currentWindow, indicators);
         
         // Phase 3: AI Validation + Decision
         const marketContext = new MarketContext();
