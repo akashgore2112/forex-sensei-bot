@@ -3,9 +3,7 @@ const HistoricalDataFetcher = require("../backtesting/historical-data-fetcher");
 const DataValidator = require("../backtesting/data-validator");
 const BacktestRunner = require("../backtesting/backtest-runner");
 const PerformanceCalculator = require("../backtesting/performance-calculator");
-const TradeAnalyzer = require("../backtesting/trade-analyzer");
 const ReportGenerator = require("../backtesting/report-generator");
-
 require("dotenv").config();
 
 async function testBacktest() {
@@ -14,40 +12,54 @@ async function testBacktest() {
   console.log("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n");
 
   try {
-    // 🔹 Step 19: Fetch historical data
+    // Fetch historical data
     const dataFetcher = new HistoricalDataFetcher();
     const historicalData = await dataFetcher.fetchData("EUR/USD", 2);
+
+    console.log("\n📊 DATA SUMMARY:");
+    console.log(`Total candles fetched: ${historicalData.length}`);
+    console.log(`Date range: ${historicalData[0].timestamp} to ${historicalData[historicalData.length-1].timestamp}`);
+    console.log(`Rolling windows: ${Math.max(0, historicalData.length - 100)}\n`);
+
+    if (historicalData.length < 100) {
+      throw new Error("Not enough historical data (need 100+ candles)");
+    }
 
     const validator = new DataValidator();
     const validation = validator.validate(historicalData);
 
     if (!validation.valid) {
-      console.log("⚠️  Data quality issues detected, but continuing...");
+      console.log("⚠️ Data quality issues detected, but continuing...\n");
     }
 
-    // 🔹 Step 20: Run backtest
+    // Run backtest with debug logging
     const backtester = new BacktestRunner({
       startBalance: 10000,
       riskPerTrade: 1,
-      useAIValidation: false // Fast backtest (no GPT-4 calls)
+      useAIValidation: false
     });
+
+    console.log("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
+    console.log("   STARTING BACKTEST LOOP");
+    console.log("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n");
 
     const trades = await backtester.runBacktest(historicalData);
 
-    // 🔹 Step 21: Performance Analytics
+    console.log("\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
+    console.log("   BACKTEST STATISTICS");
+    console.log("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n");
+
+    // Calculate performance
     const perfCalc = new PerformanceCalculator();
     const metrics = perfCalc.calculate(trades, 10000);
 
-    const analyzer = new TradeAnalyzer();
-    const tradeInsights = analyzer.analyze(trades);
-
     const reportGen = new ReportGenerator();
-    const report = reportGen.generate(metrics, trades, tradeInsights);
+    const report = reportGen.generate(metrics, trades);
 
-    console.log("✅ Backtest Complete!");
-    console.log(`Recommendation: ${report.recommendation}`);
+    console.log(`Recommendation: ${report.recommendation}\n`);
 
-    return { success: true, report };
+    return { success: true, report, trades };
+
   } catch (error) {
     console.error("\n❌ ERROR:", error.message);
     console.error(error.stack);
