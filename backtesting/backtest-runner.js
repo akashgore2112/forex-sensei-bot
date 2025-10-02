@@ -23,7 +23,6 @@ class BacktestRunner {
       riskPerTrade: this.riskPerTrade
     });
 
-    // Rejection tracking
     this.rejectionStats = {
       totalWindows: 0,
       phase2MLRejected: 0,
@@ -34,27 +33,27 @@ class BacktestRunner {
       approved: 0
     };
   }
-  calculateMTFABias(candles, indicators) {
-  // Calculate bias from EMA crossover
-  const ema20Last = indicators.ema20[indicators.ema20.length - 1];
-  const ema50Last = indicators.ema50[indicators.ema50.length - 1];
-  
-  let bias = "NEUTRAL";
-  if (ema20Last > ema50Last) bias = "BULLISH";
-  else if (ema20Last < ema50Last) bias = "BEARISH";
 
-  return {
-    dailyCandles: candles,
-    biases: { 
-      daily: bias, 
-      weekly: bias,  // Simplified: use same bias
-      monthly: bias 
-    },
-    overallBias: bias,
-    confidence: 75,
-    daily: { indicators }
-  };
-}
+  calculateMTFABias(candles, indicators) {
+    const ema20Last = indicators.ema20[indicators.ema20.length - 1];
+    const ema50Last = indicators.ema50[indicators.ema50.length - 1];
+    
+    let bias = "NEUTRAL";
+    if (ema20Last > ema50Last) bias = "BULLISH";
+    else if (ema20Last < ema50Last) bias = "BEARISH";
+
+    return {
+      dailyCandles: candles,
+      biases: { 
+        daily: bias, 
+        weekly: bias,
+        monthly: bias 
+      },
+      overallBias: bias,
+      confidence: 75,
+      daily: { indicators }
+    };
+  }
 
   async runBacktest(historicalCandles) {
     console.log("\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
@@ -67,7 +66,6 @@ class BacktestRunner {
     const trades = [];
     const windowSize = 100;
 
-    // Load models once
     const ensemble = new EnsemblePredictor();
     const fs = require("fs");
     const path = require("path");
@@ -95,7 +93,6 @@ class BacktestRunner {
     const totalWindows = historicalCandles.length - windowSize;
     console.log(`Total rolling windows to process: ${totalWindows}\n`);
 
-    // Rolling window backtest
     for (let i = windowSize; i < historicalCandles.length; i++) {
       this.rejectionStats.totalWindows++;
       
@@ -103,22 +100,15 @@ class BacktestRunner {
       const currentCandle = currentWindow[currentWindow.length - 1];
 
       try {
-        // Phase 1 & 2: Indicators + Ensemble
         const indicators = await SwingIndicators.calculateAll(currentWindow);
         
-        // OLD (wrong):
-       const mtfaResult = {
-       dailyCandles: currentWindow,
-       biases: { daily: "BULLISH", weekly: "BULLISH", monthly: "BULLISH" },
-       overallBias: "BULLISH",
-       confidence: 85,
-       daily: { indicators }
-       };
-
-         // NEW (correct):
+        // Calculate dynamic MTFA bias
         const mtfaResult = this.calculateMTFABias(currentWindow, indicators);
         
-        // Phase 3: AI Validation + Decision
+        // Ensemble prediction
+        const ensembleResult = await ensemble.predict(currentWindow, indicators);
+        
+        // Market context
         const marketContext = new MarketContext();
         const context = marketContext.analyze(currentWindow, indicators, ensembleResult);
 
@@ -146,7 +136,6 @@ class BacktestRunner {
 
         const signal = signalComposer.compose(finalDecision, mtfaResult, ensembleResult, aiValidation, context);
 
-        // Phase 4: Quality Control
         const filterResults = filterEngine.runFilters(signal, mtfaResult, ensembleResult);
         
         if (!filterResults.passed) {
@@ -171,7 +160,6 @@ class BacktestRunner {
 
         this.rejectionStats.approved++;
 
-        // Phase 5: Generate trading signal
         const tradingSignal = signalGenerator.generate(signal, mtfaResult, ensembleResult, qualityScore);
 
         if (tradingSignal.direction !== "NO_SIGNAL") {
@@ -192,14 +180,12 @@ class BacktestRunner {
         continue;
       }
 
-      // Progress update every 50 candles
       if (i % 50 === 0) {
         const progress = ((i - windowSize) / totalWindows * 100).toFixed(1);
         console.log(`Progress: ${progress}% (${i - windowSize}/${totalWindows} windows)`);
       }
     }
 
-    // Final Statistics
     console.log("\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
     console.log("   REJECTION BREAKDOWN");
     console.log("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n");
