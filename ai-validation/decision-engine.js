@@ -112,6 +112,14 @@ class DecisionEngine {
 
   /** Apply filters + final decision */
   applyDecisionLogic(signal, finalConfidence, aiValidation, scores) {
+    // ✅ NEW: Reject low-confidence ensemble predictions
+    if (scores.ml < 0.70) {
+      return {
+        decision: "NO_SIGNAL",
+        reasoning: `ML confidence too low: ${(scores.ml * 100).toFixed(1)}% < 70% required`
+      };
+    }
+
     if (aiValidation.validation === "REJECT") {
       return {
         decision: "NO_SIGNAL",
