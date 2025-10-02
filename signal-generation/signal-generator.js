@@ -18,11 +18,14 @@ class SignalGenerator {
     this.telegramFormatter = new TelegramFormatter();
   }
 
-  /**
-   * Generate complete trading signal
-   */
   generate(approvedSignal, mtfa, ensemble, qualityScore) {
     console.log("\n📝 [SignalGenerator] Generating final trading signal...");
+
+    // Check if signal is NO_SIGNAL
+    if (approvedSignal.signal === "NO_SIGNAL") {
+      console.log("   ⚠️ NO_SIGNAL detected - generating NO_SIGNAL response");
+      return this.generateNoSignal(approvedSignal, qualityScore);
+    }
 
     // Step 16: Entry/Exit
     const entry = this.entryManager.calculateEntry(approvedSignal, mtfa);
@@ -34,7 +37,6 @@ class SignalGenerator {
     const riskMetrics = this.riskCalculator.calculateRiskMetrics(approvedSignal, positionSize);
     const optimizedSL = this.stopLossOptimizer.optimizeStopLoss(approvedSignal, mtfa);
 
-    // Final Signal
     const finalSignal = {
       id: this.generateSignalID(),
       timestamp: new Date().toISOString(),
@@ -78,15 +80,29 @@ class SignalGenerator {
     return finalSignal;
   }
 
+  generateNoSignal(approvedSignal, qualityScore) {
+    return {
+      id: this.generateSignalID(),
+      timestamp: new Date().toISOString(),
+      pair: approvedSignal.pair,
+      direction: "NO_SIGNAL",
+      entry: { type: "NO_ENTRY", price: null, conditions: [] },
+      exits: { stopLoss: null, takeProfit: null, trailing: null, partial: null },
+      position: { size: 0, units: 0, risk: "0%", potentialLoss: 0, potentialProfit: 0 },
+      risk: { riskReward: 0, riskPips: 0, rewardPips: 0, maxLoss: 0, maxProfit: 0, winRateNeeded: 0, riskGrade: "N/A" },
+      timing: this.timingOptimizer.analyzeTiming(),
+      quality: { score: qualityScore.score, grade: qualityScore.grade },
+      analysis: approvedSignal.reasoning,
+      confidence: approvedSignal.confidence
+    };
+  }
+
   generateSignalID() {
     const timestamp = Date.now();
     const random = Math.floor(Math.random() * 1000);
     return `SIG-${timestamp}-${random}`;
   }
 
-  /**
-   * Format for Telegram delivery
-   */
   formatForTelegram(signal) {
     return this.telegramFormatter.format(signal);
   }
