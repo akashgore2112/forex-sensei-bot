@@ -1,5 +1,5 @@
 // backtesting/historical-data-fetcher.js
-const AlphaVantageAPI = require('../alpha-vantage-api');
+const AlphaVantageAPI = require('./alpha-vantage-api');
 
 class HistoricalDataFetcher {
   constructor() {
