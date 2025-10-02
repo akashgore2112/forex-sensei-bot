@@ -7,16 +7,16 @@ module.exports = {
   },
 
   thresholds: {
-    minimumConfidence: 0.50,  // CHANGED: 65% → 50%
-    approveThreshold: 0.70,   // CHANGED: 75% → 70%
-    cautionThreshold: 0.55,   // CHANGED: 60% → 55%
-    rejectThreshold: 0.40     // kept same
+    minimumConfidence: 0.60,  // CHANGED: 0.50 → 0.60 (higher threshold)
+    approveThreshold: 0.75,   // CHANGED: 0.70 → 0.75
+    cautionThreshold: 0.60,   // CHANGED: 0.55 → 0.60
+    rejectThreshold: 0.45     // CHANGED: 0.40 → 0.45
   },
 
   filters: {
     requireAIApproval: false,
     blockOnAIReject: true,
-    minModelAgreement: 0.25,  // CHANGED: 50% → 25% (1/4 models enough)
+    minModelAgreement: 0.50,  // CHANGED: 0.25 → 0.50 (2/4 models must agree)
     allowHoldSignals: false
   }
 };
