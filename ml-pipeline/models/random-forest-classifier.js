@@ -5,9 +5,9 @@ const fs = require('fs');
 class SwingSignalClassifier {
   constructor() {
     this.trees = [];
-    this.nTrees = 150;        // CHANGED: 100 → 150
-    this.labelMap = { BUY: 0, SELL: 1, HOLD: 2 };
-    this.reverseLabel = ["BUY", "SELL", "HOLD"];
+    this.nTrees = 150;
+    this.labelMap = { BUY: 0, SELL: 1 };  // REMOVED HOLD
+    this.reverseLabel = ["BUY", "SELL"];  // REMOVED HOLD
     this.trainingMetrics = null;
   }
 
@@ -16,7 +16,6 @@ class SwingSignalClassifier {
     return Number(v);
   }
 
-  // ✅ UPDATED: Use new features (11 total)
   prepareFeatures(marketData) {
     const emaTrend = marketData.ema20 > marketData.ema50 ? 1 : -1;
     const rsiNorm = this.safeNumber((marketData.rsi - 50) / 50);
@@ -34,7 +33,6 @@ class SwingSignalClassifier {
     const volumeRatio = marketData.avgVolume && marketData.avgVolume !== 0 ?
       (marketData.volume / marketData.avgVolume) - 1 : 0;
 
-    // NEW FEATURES (from Change 5 in feature-generator.js)
     const priceMomentum5 = marketData.price_momentum_5 || 0;
     const rsiTrend = marketData.rsi_trend || 0;
     const bbPosition = marketData.bb_position || 0.5;
@@ -48,10 +46,10 @@ class SwingSignalClassifier {
       this.safeNumber(pricePos),
       this.safeNumber(momentum),
       this.safeNumber(volumeRatio),
-      this.safeNumber(priceMomentum5), // NEW
-      this.safeNumber(rsiTrend),       // NEW
-      this.safeNumber(bbPosition),     // NEW
-      this.safeNumber(volumeMomentum)  // NEW
+      this.safeNumber(priceMomentum5),
+      this.safeNumber(rsiTrend),
+      this.safeNumber(bbPosition),
+      this.safeNumber(volumeMomentum)
     ];
   }
 
@@ -65,7 +63,7 @@ class SwingSignalClassifier {
     const balancedData = [];
     const balancedLabels = [];
 
-    [0, 1, 2].forEach(classLabel => {
+    [0, 1].forEach(classLabel => {  // CHANGED: only BUY(0) and SELL(1)
       const classIndices = labels
         .map((l, i) => l === classLabel ? i : -1)
         .filter(i => i !== -1);
@@ -105,7 +103,6 @@ class SwingSignalClassifier {
       const currentData = historicalData[i];
       const features = this.prepareFeatures(currentData);
 
-      // ✅ UPDATED: must have 11 features
       if (features.length !== 11 || features.some(v => v === undefined || Number.isNaN(v))) {
         continue;
       }
@@ -116,9 +113,10 @@ class SwingSignalClassifier {
 
       const priceChange = (futurePrice - currentPrice) / currentPrice;
 
-      let label = "HOLD";
-      if (priceChange > 0.005) label = "BUY";
-      else if (priceChange < -0.005) label = "SELL";
+      // CHANGED: Only BUY or SELL, no HOLD
+      let label;
+      if (priceChange > 0.003) label = "BUY";     // +0.3% or more
+      else label = "SELL";                        // Everything else
 
       allData.push(features);
       allLabels.push(this.labelMap[label]);
@@ -153,8 +151,8 @@ class SwingSignalClassifier {
 
       const tree = new DecisionTreeClassifier({
         gainFunction: 'gini',
-        maxDepth: 20,             // CHANGED: 15 → 20
-        minNumSamples: 3          // CHANGED: 5 → 3
+        maxDepth: 20,
+        minNumSamples: 3
       });
 
       tree.train(bootstrapData, bootstrapLabels);
@@ -186,9 +184,8 @@ class SwingSignalClassifier {
     const accuracy = predictions.filter((p, i) => p === testLabels[i]).length / testLabels.length;
 
     const confusionMatrix = { 
-      BUY: { BUY: 0, SELL: 0, HOLD: 0 },
-      SELL: { BUY: 0, SELL: 0, HOLD: 0 },
-      HOLD: { BUY: 0, SELL: 0, HOLD: 0 }
+      BUY: { BUY: 0, SELL: 0 },      // REMOVED HOLD
+      SELL: { BUY: 0, SELL: 0 }      // REMOVED HOLD
     };
 
     predictions.forEach((pred, i) => {
@@ -198,7 +195,7 @@ class SwingSignalClassifier {
     });
 
     const metrics = {};
-    ['BUY', 'SELL', 'HOLD'].forEach(cls => {
+    ['BUY', 'SELL'].forEach(cls => {  // REMOVED HOLD
       const tp = confusionMatrix[cls][cls];
       const fp = Object.keys(confusionMatrix).reduce((sum, k) => 
         k !== cls ? sum + confusionMatrix[k][cls] : sum, 0);
@@ -214,13 +211,13 @@ class SwingSignalClassifier {
       metrics[cls] = { precision, recall, f1Score };
     });
 
-    const averageF1 = Object.values(metrics).reduce((sum, m) => sum + m.f1Score, 0) / 3;
+    const averageF1 = Object.values(metrics).reduce((sum, m) => sum + m.f1Score, 0) / 2;  // CHANGED: /3 → /2
 
     return { accuracy, confusionMatrix, classMetrics: metrics, averageF1 };
   }
 
   predictSingle(features) {
-    const votes = [0, 0, 0];
+    const votes = [0, 0];  // CHANGED: [0,0,0] → [0,0]
 
     this.trees.forEach(tree => {
       try {
@@ -238,7 +235,6 @@ class SwingSignalClassifier {
     }
 
     const features = this.prepareFeatures(currentData);
-    // ✅ UPDATED: must be 11 features
     if (features.length !== 11) throw new Error("Invalid features");
 
     const prediction = this.predictSingle(features);
@@ -252,7 +248,7 @@ class SwingSignalClassifier {
   }
 
   calculateProbabilities(features) {
-    const votes = { BUY: 0, SELL: 0, HOLD: 0 };
+    const votes = { BUY: 0, SELL: 0 };  // REMOVED HOLD
 
     this.trees.forEach(tree => {
       try {
@@ -264,8 +260,8 @@ class SwingSignalClassifier {
     const total = Object.values(votes).reduce((a, b) => a + b, 0) || 1;
     return {
       BUY: votes.BUY / total,
-      SELL: votes.SELL / total,
-      HOLD: votes.HOLD / total
+      SELL: votes.SELL / total
+      // REMOVED HOLD
     };
   }
 
