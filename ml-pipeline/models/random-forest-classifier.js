@@ -5,7 +5,7 @@ const fs = require('fs');
 class SwingSignalClassifier {
   constructor() {
     this.trees = [];
-    this.nTrees = 100;
+    this.nTrees = 150;        // CHANGED: 100 → 150
     this.labelMap = { BUY: 0, SELL: 1, HOLD: 2 };
     this.reverseLabel = ["BUY", "SELL", "HOLD"];
     this.trainingMetrics = null;
@@ -141,8 +141,8 @@ class SwingSignalClassifier {
       
       const tree = new DecisionTreeClassifier({
         gainFunction: 'gini',
-        maxDepth: 15,
-        minNumSamples: 5
+        maxDepth: 20,             // CHANGED: 15 → 20
+        minNumSamples: 3          // CHANGED: 5 → 3
       });
       
       tree.train(bootstrapData, bootstrapLabels);
