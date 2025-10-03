@@ -1,4 +1,4 @@
-// backtesting/backtest-runner.js
+// backtesting/backtest-runner.js (FULL UPDATED FILE)
 const SwingIndicators = require("../swing-indicators");
 const EnsemblePredictor = require("../ml-pipeline/prediction/ensemble-predictor");
 const AIValidator = require("../ai-validation/ai-validator");
@@ -70,7 +70,6 @@ class BacktestRunner {
     const fs = require("fs");
     const path = require("path");
 
-    // ✅ FIXED: include "retrained_" in filter
     const versions = fs.readdirSync(path.join(__dirname, "../saved-models"))
       .filter(f => f.startsWith("v") || f.startsWith("test_") || f.startsWith("retrained_"))
       .sort();
@@ -103,14 +102,9 @@ class BacktestRunner {
 
       try {
         const indicators = await SwingIndicators.calculateAll(currentWindow);
-        
-        // Calculate dynamic MTFA bias
         const mtfaResult = this.calculateMTFABias(currentWindow, indicators);
-        
-        // Ensemble prediction
         const ensembleResult = await ensemble.predict(currentWindow, indicators);
         
-        // Market context
         const marketContext = new MarketContext();
         const context = marketContext.analyze(currentWindow, indicators, ensembleResult);
 
@@ -164,7 +158,11 @@ class BacktestRunner {
 
         const tradingSignal = signalGenerator.generate(signal, mtfaResult, ensembleResult, qualityScore);
 
-        if (tradingSignal.direction !== "NO_SIGNAL") {
+        // FIXED: Skip HOLD and NO_SIGNAL
+        if (tradingSignal.direction !== "NO_SIGNAL" && 
+            tradingSignal.direction !== "HOLD" &&
+            tradingSignal.direction === "BUY" || tradingSignal.direction === "SELL") {
+          
           const trade = this.tradeSimulator.executeTrade(
             tradingSignal,
             currentCandle,
@@ -173,12 +171,12 @@ class BacktestRunner {
 
           if (trade) {
             trades.push(trade);
-            console.log(`✅ Trade #${trades.length}: ${trade.direction} at ${currentCandle.timestamp} - ${trade.outcome}`);
+            console.log(`Trade #${trades.length}: ${trade.direction} @ ${currentCandle.timestamp} - ${trade.outcome}`);
           }
         }
 
       } catch (error) {
-        console.error(`❌ Error at candle ${i}:`, error.message);
+        console.error(`Error at candle ${i}:`, error.message);
         continue;
       }
 
@@ -196,8 +194,8 @@ class BacktestRunner {
     console.log(`Phase 4 Filters Rejected: ${this.rejectionStats.phase4FiltersRejected} (${(this.rejectionStats.phase4FiltersRejected/this.rejectionStats.totalWindows*100).toFixed(1)}%)`);
     console.log(`Phase 4 Quality Score Rejected: ${this.rejectionStats.phase4QualityRejected} (${(this.rejectionStats.phase4QualityRejected/this.rejectionStats.totalWindows*100).toFixed(1)}%)`);
     console.log(`Phase 4 Final Approval Rejected: ${this.rejectionStats.phase4ApprovalRejected} (${(this.rejectionStats.phase4ApprovalRejected/this.rejectionStats.totalWindows*100).toFixed(1)}%)`);
-    console.log(`✅ APPROVED SIGNALS: ${this.rejectionStats.approved} (${(this.rejectionStats.approved/this.rejectionStats.totalWindows*100).toFixed(1)}%)`);
-    console.log(`\n✅ Backtest complete!`);
+    console.log(`APPROVED SIGNALS: ${this.rejectionStats.approved} (${(this.rejectionStats.approved/this.rejectionStats.totalWindows*100).toFixed(1)}%)`);
+    console.log(`\nBacktest complete!`);
     console.log(`Total trades executed: ${trades.length}\n`);
 
     return trades;
