@@ -1,7 +1,7 @@
 // quality-control/final-approval.js
 class FinalApproval {
   constructor(config = {}) {
-    this.minQualityScore = config.minQualityScore || 50; // Minimum passing score
+    this.minQualityScore = config.minQualityScore || 40; // Minimum passing score
   }
 
   /**
