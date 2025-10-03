@@ -33,6 +33,9 @@ class FeatureGenerator {
     Object.assign(features, this.generateSupportResistanceFeatures(indicators, latest));
     Object.assign(features, this.generateStatisticalFeatures(candles));
 
+    // ✅ NEW FEATURE GROUP
+    Object.assign(features, this.generateAdditionalFeatures(candles, indicators, latest));
+
     return features;
   }
 
@@ -262,6 +265,40 @@ class FeatureGenerator {
   }
 
   // ==========================================================================
+  // ADDITIONAL FEATURES (NEW)
+  // ==========================================================================
+  generateAdditionalFeatures(candles, indicators, latest) {
+    const features = {};
+
+    // Price momentum (5-period ROC)
+    const closes = candles.slice(-6).map(c => c.close);
+    features.price_momentum_5 = closes.length >= 6
+      ? (closes[5] - closes[0]) / closes[0]
+      : 0;
+
+    // RSI divergence approximation
+    const rsiSlice = indicators.rsi14.slice(-10);
+    features.rsi_trend = rsiSlice.length >= 5
+      ? (rsiSlice[rsiSlice.length-1] - rsiSlice[rsiSlice.length-5]) / 50
+      : 0;
+
+    // BB position
+    if (latest.bbUpper && latest.bbLower && latest.bbUpper > latest.bbLower) {
+      features.bb_position = (latest.close - latest.bbLower) / (latest.bbUpper - latest.bbLower);
+    } else {
+      features.bb_position = 0.5;
+    }
+
+    // Volume momentum
+    const volumes = candles.slice(-10).map(c => c.volume || 0);
+    const recentVol = this.safeMean(volumes.slice(-5));
+    const olderVol = this.safeMean(volumes.slice(0, 5));
+    features.volume_momentum = olderVol > 0 ? (recentVol - olderVol) / olderVol : 0;
+
+    return features;
+  }
+
+  // ==========================================================================
   // Helper Methods
   // ==========================================================================
   getLast(arr) {
@@ -334,7 +371,6 @@ class FeatureGenerator {
   detectMomentumDivergence(indicators) {
     // Simple divergence: price making higher highs but RSI making lower highs
     // Returns 1 if divergence detected, 0 otherwise
-    // Simplified for now
     return 0;
   }
 
