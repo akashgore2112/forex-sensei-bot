@@ -25,10 +25,10 @@ async function runEnsembleTest() {
     const ensemble = new EnsemblePredictor();
     const formatter = new PredictionFormatter();
 
-    // Find latest model version
+    // Find latest model version (FIXED: includes retrained_)
     const savedModelsPath = path.join(__dirname, "../saved-models");
     const versions = fs.readdirSync(savedModelsPath)
-      .filter(f => f.startsWith("v") || f.startsWith("test_"))
+      .filter(f => f.startsWith("v") || f.startsWith("test_") || f.startsWith("retrained_"))
       .sort();
     
     if (versions.length === 0) {
@@ -38,6 +38,7 @@ async function runEnsembleTest() {
     const modelPath = path.join(savedModelsPath, versions[versions.length - 1]);
     console.log(`📂 Using models from: ${modelPath}\n`);
 
+    // This will show model loading status
     await ensemble.loadModels(modelPath);
 
     console.log("🔮 Running ensemble prediction...");
