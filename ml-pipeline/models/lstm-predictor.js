@@ -1,6 +1,4 @@
 // ml-pipeline/models/lstm-predictor.js
-// 📘 LSTM Price Predictor - FIXED VERSION with Better Confidence
-
 const tf = require("@tensorflow/tfjs-node");
 const FeatureNormalizer = require("../feature-engineering/feature-normalizer");
 
@@ -10,41 +8,41 @@ class LSTMPricePredictor {
     this.lookbackPeriod = 60;
     this.predictionHorizon = 5;
     this.normalizer = new FeatureNormalizer();
-    this.trainingHistory = null; // ✅ Store training history for confidence
+    this.trainingHistory = null;
   }
 
-  // 🔹 Build LSTM Model
   async buildModel() {
     this.model = tf.sequential();
 
     this.model.add(
       tf.layers.lstm({
-        units: 50,
+        units: 128,              // CHANGED: 50 → 128
         returnSequences: true,
-        inputShape: [this.lookbackPeriod, 5], // [close, ema20, rsi, macd, atr]
+        inputShape: [this.lookbackPeriod, 5],
       })
     );
-    this.model.add(tf.layers.dropout({ rate: 0.2 }));
+    this.model.add(tf.layers.dropout({ rate: 0.3 })); // CHANGED: 0.2 → 0.3
 
-    this.model.add(tf.layers.lstm({ units: 50, returnSequences: false }));
-    this.model.add(tf.layers.dropout({ rate: 0.2 }));
+    this.model.add(tf.layers.lstm({ 
+      units: 64,                 // CHANGED: 50 → 64
+      returnSequences: false 
+    }));
+    this.model.add(tf.layers.dropout({ rate: 0.3 })); // CHANGED: 0.2 → 0.3
 
-    this.model.add(tf.layers.dense({ units: 25, activation: "relu" }));
-    this.model.add(tf.layers.dense({ units: this.predictionHorizon })); // Predict 5 closes
+    this.model.add(tf.layers.dense({ units: 32, activation: "relu" })); // CHANGED: 25 → 32
+    this.model.add(tf.layers.dense({ units: this.predictionHorizon }));
 
     this.model.compile({
-      optimizer: tf.train.adam(0.001), // ✅ Explicit learning rate
+      optimizer: tf.train.adam(0.0005), // CHANGED: 0.001 → 0.0005
       loss: "meanSquaredError",
       metrics: ["mae"],
     });
 
     console.log("✅ LSTM Model Built Successfully");
-    this.model.summary(); // ✅ Show model architecture
+    this.model.summary();
   }
 
-  // 🔹 Prepare Training Data with Normalization
   prepareTrainingData(historicalData) {
-    // ✅ Normalize all features using feature normalizer
     const normalized = this.normalizer.normalizeDataset(historicalData);
 
     const features = [];
@@ -57,14 +55,13 @@ class LSTMPricePredictor {
         featureWindow.push([
           normalized[j].close,
           normalized[j].ema20,
-          normalized[j].rsi,    // ✅ FIXED: consistent naming
+          normalized[j].rsi,
           normalized[j].macd,
           normalized[j].atr,
         ]);
       }
       features.push(featureWindow);
 
-      // Target: next 5 days normalized close prices
       const targetWindow = [];
       for (let k = i + 1; k <= i + this.predictionHorizon; k++) {
         targetWindow.push(normalized[k].close);
@@ -78,14 +75,13 @@ class LSTMPricePredictor {
     };
   }
 
-  // 🔹 Prepare Input Features for Prediction (Normalized)
   prepareInputFeatures(recentData) {
     const normalized = this.normalizer.transform(recentData);
     const inputFeatures = [
       normalized.slice(-this.lookbackPeriod).map((d) => [
         d.close,
         d.ema20,
-        d.rsi,    // ✅ FIXED
+        d.rsi,
         d.macd,
         d.atr,
       ]),
@@ -93,39 +89,32 @@ class LSTMPricePredictor {
     return tf.tensor3d(inputFeatures, [1, this.lookbackPeriod, 5]);
   }
 
-  // 🔹 ✅ IMPROVED: Calculate Confidence from Training History
   calculateConfidence() {
     if (!this.trainingHistory) {
       console.warn("⚠️ No training history available, using default confidence");
-      return 0.5; // Default medium confidence
+      return 0.5;
     }
 
-    // Use validation loss to calculate confidence
     const valLoss = this.trainingHistory.history.val_loss;
     const finalValLoss = valLoss[valLoss.length - 1];
     
-    // Lower loss = higher confidence (inverse relationship)
-    // Map loss [0, 0.1] → confidence [1.0, 0.0]
     const confidence = Math.max(0, Math.min(1, 1 - finalValLoss * 10));
     
     return Number(confidence.toFixed(2));
   }
 
-  // 🔹 Determine Price Direction
   determinePriceDirection(predictedPrices, lastClose) {
     const firstPredicted = predictedPrices[0];
     const lastPredicted = predictedPrices[predictedPrices.length - 1];
     
-    // Check overall trend across all 5 predictions
     const trend = lastPredicted - firstPredicted;
     const percentChange = ((lastPredicted - lastClose) / lastClose) * 100;
     
-    if (percentChange > 0.3) return "BULLISH";      // +0.3% or more
-    if (percentChange < -0.3) return "BEARISH";     // -0.3% or less
-    return "NEUTRAL";                                // Between -0.3% to +0.3%
+    if (percentChange > 0.3) return "BULLISH";
+    if (percentChange < -0.3) return "BEARISH";
+    return "NEUTRAL";
   }
 
-  // 🔹 Calculate Volatility from ATR
   calculateVolatility(recentData) {
     const avgAtr = recentData
       .slice(-this.lookbackPeriod)
@@ -142,7 +131,6 @@ class LSTMPricePredictor {
     return "HIGH";
   }
 
-  // 🔹 Train Model
   async trainModel(historicalData) {
     if (!this.model) {
       await this.buildModel();
@@ -153,36 +141,32 @@ class LSTMPricePredictor {
     console.log("🎯 Starting LSTM Training...");
     
     this.trainingHistory = await this.model.fit(features, targets, {
-      epochs: 100,
+      epochs: 150,              // CHANGED: 100 → 150
       batchSize: 32,
       validationSplit: 0.2,
-      verbose: 1, // Show training progress
+      verbose: 1,
       callbacks: [
         tf.callbacks.earlyStopping({ 
           monitor: 'val_loss',
-          patience: 10
+          patience: 20          // CHANGED: 10 → 20
         })
       ],
     });
 
     console.log("✅ LSTM Training Completed");
     
-    // ✅ Show final metrics
     const finalLoss = this.trainingHistory.history.loss.slice(-1)[0];
     const finalValLoss = this.trainingHistory.history.val_loss.slice(-1)[0];
     console.log(`📊 Final Training Loss: ${finalLoss.toFixed(6)}`);
     console.log(`📊 Final Validation Loss: ${finalValLoss.toFixed(6)}`);
 
-    // Save model
     await this.model.save("file://./saved-models/lstm-price-predictor");
     console.log("💾 Model Saved: ./saved-models/lstm-price-predictor");
     
-    // Clean up tensors
     features.dispose();
     targets.dispose();
   }
 
-  // 🔹 Predict Next Prices (with inverse transform)
   async predict(recentData) {
     if (!this.model) {
       throw new Error("❌ Model not built or loaded. Call buildModel() or load model first.");
@@ -197,16 +181,14 @@ class LSTMPricePredictor {
     const tensorInput = this.prepareInputFeatures(recentData);
     const prediction = this.model.predict(tensorInput);
 
-    // ✅ Get normalized predictions and denormalize them
     const predictedNormalized = Array.from(await prediction.data());
     const predictedPrices = this.normalizer.inverseTransformClose(predictedNormalized);
 
     const lastClose = recentData[recentData.length - 1].close;
     const direction = this.determinePriceDirection(predictedPrices, lastClose);
-    const confidence = this.calculateConfidence(); // ✅ Better confidence calculation
+    const confidence = this.calculateConfidence();
     const volatility = this.calculateVolatility(recentData);
 
-    // Clean up tensors
     tensorInput.dispose();
     prediction.dispose();
 
@@ -220,7 +202,6 @@ class LSTMPricePredictor {
     };
   }
 
-  // 🔹 Load Saved Model
   async loadModel(modelPath = "file://./saved-models/lstm-price-predictor/model.json") {
     try {
       this.model = await tf.loadLayersModel(modelPath);
