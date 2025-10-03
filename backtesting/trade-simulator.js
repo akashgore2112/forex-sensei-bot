@@ -15,15 +15,19 @@ class TradeSimulator {
     const takeProfit = signal.exits.takeProfit;
     const direction = signal.direction;
 
-    // DEBUG: Log first 3 trades
+    // DEBUG: Log first 3 trades in detail
     if (this.tradeCount <= 3) {
       console.log(`\n🔍 TRADE #${this.tradeCount} DEBUG:`);
       console.log(`   Direction: ${direction}`);
-      console.log(`   Entry: ${entry.toFixed(5)}`);
-      console.log(`   SL: ${stopLoss.toFixed(5)}`);
-      console.log(`   TP: ${takeProfit.toFixed(5)}`);
-      console.log(`   Entry Candle Close: ${entryCandle.close.toFixed(5)}`);
-      console.log(`   Next Candle: High=${futureCandles[0].high.toFixed(5)} Low=${futureCandles[0].low.toFixed(5)}`);
+      console.log(`   Entry Price: ${entry?.toFixed?.(5) || entry}`);
+      console.log(`   StopLoss: ${stopLoss?.toFixed?.(5) || stopLoss}`);
+      console.log(`   TakeProfit: ${takeProfit?.toFixed?.(5) || takeProfit}`);
+      console.log(`   Entry Candle Close: ${entryCandle.close?.toFixed?.(5)}`);
+      if (futureCandles[0]) {
+        console.log(
+          `   Next Candle: High=${futureCandles[0].high?.toFixed?.(5)} Low=${futureCandles[0].low?.toFixed?.(5)}`
+        );
+      }
     }
 
     let outcome = "PENDING";
@@ -75,15 +79,16 @@ class TradeSimulator {
     // DEBUG: Log outcome of first 3 trades
     if (this.tradeCount <= 3) {
       console.log(`   Outcome: ${outcome}`);
-      console.log(`   Exit: ${exitPrice.toFixed(5)}\n`);
+      console.log(`   Exit Price: ${exitPrice?.toFixed?.(5) || exitPrice}`);
+      console.log(`   Balance After Trade: ${this.balance.toFixed(2)}\n`);
     }
 
     return {
       id: signal.id,
       direction,
-      entryTime: entryCandle.timestamp || entryCandle.time,  // FIXED: use timestamp
+      entryTime: entryCandle.timestamp || entryCandle.time,
       entryPrice: entry,
-      exitTime: exitCandle ? (exitCandle.timestamp || exitCandle.time) : null,  // FIXED
+      exitTime: exitCandle ? (exitCandle.timestamp || exitCandle.time) : null,
       exitPrice,
       stopLoss,
       takeProfit,
