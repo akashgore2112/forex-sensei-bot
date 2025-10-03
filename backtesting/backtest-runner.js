@@ -69,8 +69,10 @@ class BacktestRunner {
     const ensemble = new EnsemblePredictor();
     const fs = require("fs");
     const path = require("path");
+
+    // ✅ FIXED: include "retrained_" in filter
     const versions = fs.readdirSync(path.join(__dirname, "../saved-models"))
-      .filter(f => f.startsWith("v") || f.startsWith("test_"))
+      .filter(f => f.startsWith("v") || f.startsWith("test_") || f.startsWith("retrained_"))
       .sort();
     
     if (versions.length === 0) throw new Error("No models found");
