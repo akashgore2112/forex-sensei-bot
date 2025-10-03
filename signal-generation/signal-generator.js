@@ -22,7 +22,8 @@ class SignalGenerator {
     console.log("\n📝 [SignalGenerator] Generating final trading signal...");
 
     // Check if signal is NO_SIGNAL
-    if (approvedSignal.signal === "NO_SIGNAL") {
+    // AFTER:
+    if (approvedSignal.signal === "NO_SIGNAL" || approvedSignal.signal === "HOLD") {
       console.log("   ⚠️ NO_SIGNAL detected - generating NO_SIGNAL response");
       return this.generateNoSignal(approvedSignal, qualityScore);
     }
