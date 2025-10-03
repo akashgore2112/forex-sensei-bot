@@ -7,7 +7,7 @@ module.exports = {
     },
     riskReward: {
       minRR: 1.5,
-      blocking: true
+      blocking: false
     },
     volatility: {
       blockHighVol: false,
