@@ -45,31 +45,80 @@ class ModelTrainer {
       throw new Error("❌ No raw candles available");
     }
 
-    // Recalculate indicators
     console.log("   📊 Calculating indicators for training data...");
     const indicators = await SwingIndicators.calculateAll(dataset.rawCandles);
 
-    const candlesWithIndicators = dataset.rawCandles.map((candle, i) => ({
-      ...candle,
-      ema20: indicators.ema20[i] || 0,
-      ema50: indicators.ema50[i] || 0,
-      ema200: indicators.ema200[i] || 0,
-      rsi: indicators.rsi14[i] || 0,
-      macd: {
-        macd: indicators.macd?.macd[i] || 0,
-        signal: indicators.macd?.signal[i] || 0,
-        histogram: indicators.macd?.histogram[i] || 0
-      },
-      atr: indicators.atr[i] || 0,
-      adx: indicators.adx[i] || 0,
-      prevClose: i > 0 ? dataset.rawCandles[i-1].close : candle.close,
-      avgVolume: candle.volume || 1
-    }));
+    // UPDATED: Add new features to each candle
+    const candlesWithIndicators = dataset.rawCandles.map((candle, i) => {
+      // Basic indicators
+      const data = {
+        ...candle,
+        ema20: indicators.ema20[i] || 0,
+        ema50: indicators.ema50[i] || 0,
+        ema200: indicators.ema200[i] || 0,
+        rsi: indicators.rsi14[i] || 0,
+        macd: {
+          macd: indicators.macd?.macd[i] || 0,
+          signal: indicators.macd?.signal[i] || 0,
+          histogram: indicators.macd?.histogram[i] || 0
+        },
+        atr: indicators.atr[i] || 0,
+        adx: indicators.adx[i] || 0,
+        prevClose: i > 0 ? dataset.rawCandles[i-1].close : candle.close,
+        avgVolume: candle.volume || 1
+      };
+
+      // NEW FEATURES (from Change 5)
+      
+      // 1. Price momentum (5-period ROC)
+      if (i >= 5) {
+        const closes = dataset.rawCandles.slice(i-5, i+1).map(c => c.close);
+        data.price_momentum_5 = (closes[5] - closes[0]) / closes[0];
+      } else {
+        data.price_momentum_5 = 0;
+      }
+
+      // 2. RSI trend
+      if (i >= 9) {
+        const rsiSlice = [
+          indicators.rsi14[i-9], 
+          indicators.rsi14[i-4], 
+          indicators.rsi14[i]
+        ].filter(v => v != null);
+        if (rsiSlice.length >= 2) {
+          data.rsi_trend = (rsiSlice[rsiSlice.length-1] - rsiSlice[0]) / 50;
+        } else {
+          data.rsi_trend = 0;
+        }
+      } else {
+        data.rsi_trend = 0;
+      }
+
+      // 3. BB position
+      const bbUpper = indicators.bollinger?.upper[i];
+      const bbLower = indicators.bollinger?.lower[i];
+      if (bbUpper && bbLower && bbUpper > bbLower) {
+        data.bb_position = (candle.close - bbLower) / (bbUpper - bbLower);
+      } else {
+        data.bb_position = 0.5;
+      }
+
+      // 4. Volume momentum
+      if (i >= 9) {
+        const volumes = dataset.rawCandles.slice(i-9, i+1).map(c => c.volume || 0);
+        const recentVol = volumes.slice(-5).reduce((a,b) => a+b, 0) / 5;
+        const olderVol = volumes.slice(0, 5).reduce((a,b) => a+b, 0) / 5;
+        data.volume_momentum = olderVol > 0 ? (recentVol - olderVol) / olderVol : 0;
+      } else {
+        data.volume_momentum = 0;
+      }
+
+      return data;
+    });
 
     const rf = new SwingSignalClassifier();
     await rf.trainModel(candlesWithIndicators);
 
-    // Evaluate on test set
     console.log("   📊 Evaluating on test set...");
     const testMetrics = this._evaluateRFOnTestSet(rf, candlesWithIndicators, dataset);
 
@@ -117,7 +166,6 @@ class ModelTrainer {
     await lstm.buildModel();
     await lstm.trainModel(candlesWithIndicators);
 
-    // Evaluate on test set
     console.log("   📊 Evaluating on test set...");
     const testMetrics = await this._evaluateLSTMOnTestSet(lstm, candlesWithIndicators, dataset);
 
@@ -147,7 +195,6 @@ class ModelTrainer {
     };
   }
 
-  // Evaluate Random Forest on test set
   _evaluateRFOnTestSet(rf, candles, dataset) {
     const testStartIdx = dataset.metadata.trainSamples + dataset.metadata.valSamples;
     const testCandles = candles.slice(testStartIdx, testStartIdx + dataset.metadata.testSamples);
@@ -159,7 +206,6 @@ class ModelTrainer {
       const prediction = rf.predict(testCandles[i]);
       yPred.push(prediction.signal);
 
-      // Calculate actual label
       const futurePrice = testCandles[i + 5]?.close;
       const currentPrice = testCandles[i].close;
       const change = (futurePrice - currentPrice) / currentPrice;
@@ -174,7 +220,6 @@ class ModelTrainer {
     return this.evaluator.evaluateClassification(yTrue, yPred);
   }
 
-  // Evaluate LSTM on test set
   async _evaluateLSTMOnTestSet(lstm, candles, dataset) {
     const testStartIdx = dataset.metadata.trainSamples + dataset.metadata.valSamples;
     const testCandles = candles.slice(testStartIdx);
@@ -187,14 +232,13 @@ class ModelTrainer {
     const yTrue = [];
     const yPred = [];
 
-    // Make predictions on test set
     for (let i = lstm.lookbackPeriod; i < testCandles.length - lstm.predictionHorizon; i++) {
       const recentData = testCandles.slice(i - lstm.lookbackPeriod, i);
       
       try {
         const prediction = await lstm.predict(recentData);
-        yPred.push(prediction.predictedPrices[0]); // First predicted price
-        yTrue.push(testCandles[i + 1].close); // Actual next close
+        yPred.push(prediction.predictedPrices[0]);
+        yTrue.push(testCandles[i + 1].close);
       } catch (err) {
         console.warn(`   ⚠️ Prediction error at index ${i}: ${err.message}`);
       }
