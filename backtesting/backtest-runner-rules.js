@@ -52,9 +52,16 @@ class RuleBasedBacktestRunner {
 
       if (setup) {
         this.stats.setupsDetected++;
-        console.log(`Setup #${this.stats.setupsDetected}: ${setup.type} ${setup.direction} @ ${current.timestamp}`);
+        
+        // Detailed logging
+        console.log(`\n--- Setup #${this.stats.setupsDetected} ---`);
+        console.log(`Date: ${current.timestamp}`);
+        console.log(`Type: ${setup.type}`);
+        console.log(`Signal: ${setup.direction}`);
+        console.log(`Reason: ${setup.reason}`);
+        console.log(`Entry: ${setup.entry.toFixed(5)} | SL: ${setup.stopLoss.toFixed(5)} | TP: ${setup.takeProfit.toFixed(5)}`);
+        console.log(`R:R = ${setup.riskReward}:1`);
 
-        // Convert setup to signal format for simulator
         const signal = {
           direction: setup.direction,
           entry: { price: setup.entry },
@@ -63,7 +70,8 @@ class RuleBasedBacktestRunner {
             takeProfit: setup.takeProfit
           },
           risk: { riskReward: setup.riskReward },
-          quality: { grade: "A" }
+          quality: { grade: "A" },
+          id: `SETUP-${this.stats.setupsDetected}`
         };
 
         const trade = this.tradeSimulator.executeTrade(
@@ -72,7 +80,9 @@ class RuleBasedBacktestRunner {
           historicalCandles.slice(i + 1, i + 20)
         );
 
-        trades.push({ ...trade, setupType: setup.type });
+        console.log(`Result: ${trade.outcome} | P/L: $${trade.profitLoss}`);
+        
+        trades.push({ ...trade, setupType: setup.type, setupReason: setup.reason });
       }
 
       if (i % 50 === 0) {
@@ -82,7 +92,7 @@ class RuleBasedBacktestRunner {
 
     console.log(`\nTotal Windows: ${this.stats.totalWindows}`);
     console.log(`Setups Detected: ${this.stats.setupsDetected}`);
-    console.log(`Trades Executed: ${trades.length}\n`);
+    console.log(`Trades Executed: ${trades.length}`);
 
     return trades;
   }
