@@ -14,47 +14,37 @@ class BreakoutVolumeSetup {
     const adx = indicators.adx[indicators.adx.length - 1];
     const atr = indicators.atr[indicators.atr.length - 1];
 
-    // Rule 1: BB squeeze (width < 70% of average)
     const bbWidth = bbUpper - bbLower;
     const avgBBWidth = this.calculateAvgBBWidth(indicators.bollinger, 20);
-    const isSqueeze = bbWidth < avgBBWidth * 0.7;
-
-    if (!isSqueeze) return null;
-
-    // Rule 2: ADX rising (trend building)
-    const adxPrev = indicators.adx[indicators.adx.length - 5];
-    const adxRising = adx > adxPrev && adx > 20;
-
-    if (!adxRising) return null;
-
-    // Rule 3: Price breakout of BB
-    const breakoutUp = latest.close > bbUpper;
-    const breakoutDown = latest.close < bbLower;
-
-    if (!breakoutUp && !breakoutDown) return null;
-
-    // Rule 4: Volume confirmation
     const avgVolume = this.calculateAvgVolume(candles, 20);
-    const volumeSpike = latest.volume > avgVolume * 1.3;
+    
+    const checks = {
+      isSqueeze: bbWidth < avgBBWidth * 0.7,
+      adxRising: adx > indicators.adx[indicators.adx.length - 5] && adx > 20,
+      breakout: latest.close > bbUpper || latest.close < bbLower,
+      volumeSpike: latest.volume > avgVolume * 1.3
+    };
 
-    if (!volumeSpike) return null;
+    if (!Object.values(checks).every(v => v)) return null;
 
-    // Setup detected
-    const direction = breakoutUp ? "BUY" : "SELL";
+    const direction = latest.close > bbUpper ? "BUY" : "SELL";
     
     let entry, stopLoss, takeProfit;
     
     if (direction === "BUY") {
       entry = latest.close;
-      stopLoss = bbMiddle; // Back inside range
+      stopLoss = bbMiddle;
       const risk = entry - stopLoss;
-      takeProfit = entry + risk * 2.5; // 2.5:1 for breakouts
+      takeProfit = entry + risk * 2.5;
     } else {
       entry = latest.close;
       stopLoss = bbMiddle;
       const risk = stopLoss - entry;
       takeProfit = entry - risk * 2.5;
     }
+
+    const volRatio = (latest.volume / avgVolume).toFixed(2);
+    const bbSqueezePct = ((bbWidth / avgBBWidth) * 100).toFixed(0);
 
     return {
       type: this.name,
@@ -64,8 +54,9 @@ class BreakoutVolumeSetup {
       takeProfit,
       riskReward: 2.5,
       confidence: 0.70,
-      reason: `BB squeeze + volume breakout ${direction}, ADX rising`,
-      timestamp: latest.timestamp
+      reason: `${direction}: BB squeeze ${bbSqueezePct}%, Vol=${volRatio}x avg, ADX=${adx.toFixed(1)}, ATR=${(atr*10000).toFixed(1)}pips`,
+      timestamp: latest.timestamp,
+      indicators: { bbUpper, bbLower, adx, volume: latest.volume, avgVolume }
     };
   }
 
