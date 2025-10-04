@@ -9,21 +9,21 @@ class PullbackDetector {
    */
   hasPriceTouchedLevel(candles, targetLevel, lookback = 10) {
     const recentCandles = candles.slice(-lookback);
-    
+
     for (const candle of recentCandles) {
       const upperBound = targetLevel * (1 + this.tolerance);
       const lowerBound = targetLevel * (1 - this.tolerance);
-      
+
       // Check if price touched level (high/low within range)
       if (candle.high >= lowerBound && candle.low <= upperBound) {
         return {
           touched: true,
           candle: candle,
-          level: targetLevel
+          level: targetLevel,
         };
       }
     }
-    
+
     return { touched: false };
   }
 
@@ -46,14 +46,19 @@ class PullbackDetector {
       const current = recent[i];
       const previous = recent[i - 1];
 
-      console.log(`  [DEBUG] Candle ${i}: curr_low=${current.low.toFixed(5)}, prev_low=${previous.low.toFixed(5)}, curr_close=${current.close.toFixed(5)}, curr_open=${current.open.toFixed(5)}`);
+      console.log(
+        `  [DEBUG] Candle ${i}: curr_low=${current.low.toFixed(
+          5
+        )}, prev_low=${previous.low.toFixed(5)}, curr_close=${current.close.toFixed(
+          5
+        )}, curr_open=${current.open.toFixed(5)}`
+      );
 
       // Check: current low > previous low
       if (current.low <= previous.low) {
         console.log(`    ✗ Low not higher`);
         continue;
       }
-
       console.log(`    ✓ Low is higher`);
 
       // Check: current candle bullish
@@ -61,16 +66,16 @@ class PullbackDetector {
         console.log(`    ✗ Candle not bullish`);
         continue;
       }
-
       console.log(`    ✓ Candle is bullish - FOUND HIGHER LOW`);
 
-      // Found higher low
       return {
         found: true,
         candle: current,
         previousLow: previous.low,
         currentLow: current.low,
-        reason: `Higher low: ${current.low.toFixed(5)} > ${previous.low.toFixed(5)}`
+        reason: `Higher low: ${current.low.toFixed(5)} > ${previous.low.toFixed(
+          5
+        )}`,
       };
     }
 
@@ -86,29 +91,29 @@ class PullbackDetector {
    */
   detectLowerHigh(candles, lookback = 5) {
     if (candles.length < lookback + 1) return null;
-    
+
     const recent = candles.slice(-lookback);
-    
+
     for (let i = 1; i < recent.length; i++) {
       const current = recent[i];
       const previous = recent[i - 1];
-      
+
       // Check: current high < previous high
       if (current.high >= previous.high) continue;
-      
+
       // Check: current candle bearish
       if (current.close >= current.open) continue;
-      
+
       // Found lower high
       return {
         found: true,
         candle: current,
         previousHigh: previous.high,
         currentHigh: current.high,
-        reason: `Lower high: ${current.high.toFixed(5)} < ${previous.high.toFixed(5)}`
+        reason: `Lower high: ${current.high.toFixed(5)} < ${previous.high.toFixed(5)}`,
       };
     }
-    
+
     return null;
   }
 
@@ -145,7 +150,7 @@ class PullbackDetector {
         touchPoint: touchResult,
         confirmationCandle: higherLow.candle,
         rsi: rsi,
-        reason: `Pullback to ${engulfingLevel.toFixed(5)}, ${higherLow.reason}, RSI=${rsi.toFixed(1)}`
+        reason: `Pullback to ${engulfingLevel.toFixed(5)}, ${higherLow.reason}, RSI=${rsi.toFixed(1)}`,
       };
     } else if (direction === "SELL") {
       const lowerHigh = this.detectLowerHigh(candles, 5);
@@ -158,7 +163,7 @@ class PullbackDetector {
         touchPoint: touchResult,
         confirmationCandle: lowerHigh.candle,
         rsi: rsi,
-        reason: `Pullback to ${engulfingLevel.toFixed(5)}, ${lowerHigh.reason}, RSI=${rsi.toFixed(1)}`
+        reason: `Pullback to ${engulfingLevel.toFixed(5)}, ${lowerHigh.reason}, RSI=${rsi.toFixed(1)}`,
       };
     }
 
