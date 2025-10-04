@@ -37,18 +37,18 @@ function testOrchestrator() {
     { timestamp: '2024-01-09T04:00:00Z', open: 1.083, high: 1.097, low: 1.082, close: 1.096 }  
   ];  
   
-  const oneHCandles = [  
-    { timestamp: '2024-01-10T00:00:00Z', open: 1.0900, high: 1.0910, low: 1.0890, close: 1.0895 },  
-    { timestamp: '2024-01-10T01:00:00Z', open: 1.0895, high: 1.0900, low: 1.0880, close: 1.0885 },  
-    { timestamp: '2024-01-10T02:00:00Z', open: 1.0885, high: 1.0890, low: 1.0870, close: 1.0875 },  
-    { timestamp: '2024-01-10T03:00:00Z', open: 1.0875, high: 1.0880, low: 1.0860, close: 1.0865 },  
-    { timestamp: '2024-01-10T04:00:00Z', open: 1.0865, high: 1.0870, low: 1.0849, close: 1.0852 },  
-    { timestamp: '2024-01-10T05:00:00Z', open: 1.0852, high: 1.0860, low: 1.0851, close: 1.0858 },  
-    { timestamp: '2024-01-10T06:00:00Z', open: 1.0858, high: 1.0870, low: 1.0855, close: 1.0868 },  
-    { timestamp: '2024-01-10T07:00:00Z', open: 1.0868, high: 1.0880, low: 1.0862, close: 1.0875 },  
-    { timestamp: '2024-01-10T08:00:00Z', open: 1.0875, high: 1.0890, low: 1.0870, close: 1.0885 },  
-    { timestamp: '2024-01-10T09:00:00Z', open: 1.0885, high: 1.0900, low: 1.0880, close: 1.0895 }  
-  ];  
+  const oneHCandles = [
+  { timestamp: '2024-01-10T00:00:00Z', open: 1.0900, high: 1.0910, low: 1.0890, close: 1.0895 },
+  { timestamp: '2024-01-10T01:00:00Z', open: 1.0895, high: 1.0900, low: 1.0880, close: 1.0885 },
+  { timestamp: '2024-01-10T02:00:00Z', open: 1.0885, high: 1.0890, low: 1.0860, close: 1.0875 },
+  { timestamp: '2024-01-10T03:00:00Z', open: 1.0875, high: 1.0880, low: 1.0840, close: 1.0865 },
+  { timestamp: '2024-01-10T04:00:00Z', open: 1.0865, high: 1.0870, low: 1.0819, close: 1.0822 }, // Touches 1.082
+  { timestamp: '2024-01-10T05:00:00Z', open: 1.0822, high: 1.0830, low: 1.0821, close: 1.0828 }, // Higher low
+  { timestamp: '2024-01-10T06:00:00Z', open: 1.0828, high: 1.0850, low: 1.0825, close: 1.0848 }, // Bullish
+  { timestamp: '2024-01-10T07:00:00Z', open: 1.0848, high: 1.0870, low: 1.0845, close: 1.0865 },
+  { timestamp: '2024-01-10T08:00:00Z', open: 1.0865, high: 1.0880, low: 1.0860, close: 1.0875 },
+  { timestamp: '2024-01-10T09:00:00Z', open: 1.0875, high: 1.0890, low: 1.0870, close: 1.0885 }
+ ];  
   
   const indicators = {  
     dailyIndicators: {  
