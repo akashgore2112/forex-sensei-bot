@@ -15,6 +15,12 @@ class TradeSimulator {
     const takeProfit = signal.exits.takeProfit;
     const direction = signal.direction;
 
+    // CRITICAL: Check if we have future candles
+    if (!futureCandles || futureCandles.length === 0) {
+      console.log(`⚠️ Skipping trade #${this.tradeCount} - no future candles available`);
+      return null;
+    }
+
     // SANITY CHECK: Verify SL/TP aren't inverted
     if (direction === "BUY") {
       if (stopLoss >= entry) {
@@ -30,13 +36,6 @@ class TradeSimulator {
       if (takeProfit >= entry) {
         console.log(`❌ ERROR TRADE #${this.tradeCount}: SELL has TP (${takeProfit.toFixed(5)}) >= entry (${entry.toFixed(5)})`);
       }
-    }
-
-    // DEBUG: Log first 3 trades
-    if (this.tradeCount <= 3) {
-      console.log(`\nTRADE #${this.tradeCount}: ${direction}`);
-      console.log(`  Entry: ${entry.toFixed(5)} | SL: ${stopLoss.toFixed(5)} | TP: ${takeProfit.toFixed(5)}`);
-      console.log(`  Current: ${entryCandle.close.toFixed(5)}`);
     }
 
     let outcome = "PENDING";
@@ -84,10 +83,6 @@ class TradeSimulator {
     const profitLoss = outcome === "WIN" ? riskAmount * rr : -riskAmount;
 
     this.balance += profitLoss;
-
-    if (this.tradeCount <= 3) {
-      console.log(`  Outcome: ${outcome} | Exit: ${exitPrice.toFixed(5)}`);
-    }
 
     return {
       id: signal.id,
