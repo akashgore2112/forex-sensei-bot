@@ -13,6 +13,7 @@ class EnsemblePredictor {
     this.randomForest = null;
     this.volatilityPredictor = null;
     this.regimeClassifier = null;
+    this.predictionCount = 0;
 
     this.weights = {
       lstm: 0.30,
@@ -45,7 +46,7 @@ class EnsemblePredictor {
   }
 
   async predict(candles, indicators) {
-    console.log("🔮 Running ensemble predictions...");
+    this.predictionCount++;
 
     if (!candles || candles.length < 100) {
       throw new Error("Need at least 100 candles for prediction");
@@ -67,19 +68,19 @@ class EnsemblePredictor {
     const recentData = candlesWithIndicators.slice(-60);
     const currentData = candlesWithIndicators[candlesWithIndicators.length - 1];
 
-    console.log("   🔮 LSTM prediction...");
     const lstmPrediction = await this.lstm.predict(recentData);
-
-    console.log("   🌲 Random Forest prediction...");
     const rfPrediction = this.randomForest.predict(currentData);
-
-    console.log("   📊 Volatility prediction...");
     const volPrediction = this.volatilityPredictor.predict(candlesWithIndicators);
-
-    console.log("   🎯 Regime classification...");
     const regimePrediction = this.regimeClassifier.classifyRegime(candlesWithIndicators, indicators);
 
-    console.log("✅ All predictions collected");
+    // DEBUG: Log first 10 predictions
+    if (this.predictionCount <= 10) {
+      console.log(`\nPREDICTION #${this.predictionCount}:`);
+      console.log(`  RF: ${rfPrediction.signal} (${(rfPrediction.confidence*100).toFixed(0)}%)`);
+      console.log(`  LSTM: ${lstmPrediction.direction} (${(lstmPrediction.confidence*100).toFixed(0)}%)`);
+      console.log(`  Regime: ${regimePrediction.classification}`);
+      console.log(`  Price: ${currentData.close.toFixed(5)}`);
+    }
 
     const ensembleResult = this.combineSignals(
       lstmPrediction, rfPrediction, volPrediction, regimePrediction
