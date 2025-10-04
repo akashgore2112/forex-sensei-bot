@@ -1,21 +1,26 @@
 // trading-patterns/pullback-detector.js
 class PullbackDetector {
   constructor() {
-    this.tolerance = 0.001; // ±0.1% as per your spec
+    this.tolerance = 0.001; // ±0.1% tolerance
   }
 
-  /**
-   * Check if any candle touched the target level within tolerance
-   */
+  /** Check if any candle touched the target level within tolerance */
   hasPriceTouchedLevel(candles, targetLevel, lookback = 10) {
     const recentCandles = candles.slice(-lookback);
+    console.log(`  [DEBUG] Checking last ${lookback} candles for touch near ${targetLevel}`);
 
     for (const candle of recentCandles) {
       const upperBound = targetLevel * (1 + this.tolerance);
       const lowerBound = targetLevel * (1 - this.tolerance);
 
-      // Check if price touched level (high/low within range)
+      console.log(
+        `  [DEBUG] Candle ${candle.timestamp}: low=${candle.low}, high=${candle.high}, range=[${lowerBound.toFixed(
+          5
+        )}, ${upperBound.toFixed(5)}]`
+      );
+
       if (candle.high >= lowerBound && candle.low <= upperBound) {
+        console.log(`    ✓ Touch detected at ${candle.timestamp}`);
         return {
           touched: true,
           candle: candle,
@@ -24,15 +29,11 @@ class PullbackDetector {
       }
     }
 
+    console.log("  [DEBUG] No touch found in last candles");
     return { touched: false };
   }
 
-  /**
-   * Detect higher low pattern on 1H (for BUY setup)
-   * Requirements:
-   * - Recent candle's low > previous candle's low
-   * - Recent candle closes bullish (close > open)
-   */
+  /** Detect higher low (for BUY setup) */
   detectHigherLow(candles, lookback = 5) {
     if (candles.length < lookback + 1) {
       console.log("  [DEBUG] Not enough candles for higher low detection");
@@ -54,14 +55,12 @@ class PullbackDetector {
         )}, curr_open=${current.open.toFixed(5)}`
       );
 
-      // Check: current low > previous low
       if (current.low <= previous.low) {
         console.log(`    ✗ Low not higher`);
         continue;
       }
       console.log(`    ✓ Low is higher`);
 
-      // Check: current candle bullish
       if (current.close <= current.open) {
         console.log(`    ✗ Candle not bullish`);
         continue;
@@ -73,9 +72,7 @@ class PullbackDetector {
         candle: current,
         previousLow: previous.low,
         currentLow: current.low,
-        reason: `Higher low: ${current.low.toFixed(5)} > ${previous.low.toFixed(
-          5
-        )}`,
+        reason: `Higher low: ${current.low.toFixed(5)} > ${previous.low.toFixed(5)}`,
       };
     }
 
@@ -83,12 +80,7 @@ class PullbackDetector {
     return null;
   }
 
-  /**
-   * Detect lower high pattern on 1H (for SELL setup)
-   * Requirements:
-   * - Recent candle's high < previous candle's high
-   * - Recent candle closes bearish (close < open)
-   */
+  /** Detect lower high (for SELL setup) */
   detectLowerHigh(candles, lookback = 5) {
     if (candles.length < lookback + 1) return null;
 
@@ -98,13 +90,9 @@ class PullbackDetector {
       const current = recent[i];
       const previous = recent[i - 1];
 
-      // Check: current high < previous high
       if (current.high >= previous.high) continue;
-
-      // Check: current candle bearish
       if (current.close >= current.open) continue;
 
-      // Found lower high
       return {
         found: true,
         candle: current,
@@ -117,28 +105,15 @@ class PullbackDetector {
     return null;
   }
 
-  /**
-   * Main method: Check if pullback is complete for entry
-   * @param {Array} candles - 1H candles
-   * @param {Number} engulfingLevel - 4H engulfing low (BUY) or high (SELL)
-   * @param {String} direction - "BUY" or "SELL"
-   * @param {Number} rsi - Current RSI value
-   */
+  /** Main function */
   isPullbackComplete(candles, engulfingLevel, direction, rsi) {
     if (candles.length < 10) return null;
 
-    // Rule 1: Price touched the engulfing level
     const touchResult = this.hasPriceTouchedLevel(candles, engulfingLevel, 10);
-    if (!touchResult.touched) {
-      return null;
-    }
+    if (!touchResult.touched) return null;
 
-    // Rule 2: RSI between 40-60 (healthy retracement)
-    if (rsi < 40 || rsi > 60) {
-      return null;
-    }
+    if (rsi < 40 || rsi > 60) return null;
 
-    // Rule 3: Higher low (BUY) or lower high (SELL) formed after touch
     if (direction === "BUY") {
       const higherLow = this.detectHigherLow(candles, 5);
       if (!higherLow) return null;
@@ -149,7 +124,7 @@ class PullbackDetector {
         pattern: "HIGHER_LOW",
         touchPoint: touchResult,
         confirmationCandle: higherLow.candle,
-        rsi: rsi,
+        rsi,
         reason: `Pullback to ${engulfingLevel.toFixed(5)}, ${higherLow.reason}, RSI=${rsi.toFixed(1)}`,
       };
     } else if (direction === "SELL") {
@@ -162,7 +137,7 @@ class PullbackDetector {
         pattern: "LOWER_HIGH",
         touchPoint: touchResult,
         confirmationCandle: lowerHigh.candle,
-        rsi: rsi,
+        rsi,
         reason: `Pullback to ${engulfingLevel.toFixed(5)}, ${lowerHigh.reason}, RSI=${rsi.toFixed(1)}`,
       };
     }
