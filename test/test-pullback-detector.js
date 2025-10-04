@@ -6,9 +6,13 @@ function testPullbackDetector() {
 
   const detector = new PullbackDetector();
 
+  // Helper: add separator for clarity
+  const separator = () => console.log("--------------------------------------------------");
+
   // Test 1: Valid BUY pullback (price touches level, forms higher low)
   console.log("Test 1: Valid BUY pullback");
-  
+  separator();
+
   const buyCandles = [
     // Price coming down to engulfing level (1.0850)
     { timestamp: '2024-01-10T00:00:00Z', open: 1.0900, high: 1.0910, low: 1.0890, close: 1.0895 },
@@ -25,8 +29,9 @@ function testPullbackDetector() {
   const engulfingLevel = 1.0850;
   const rsi = 50; // Within 40-60
 
+  console.log(`[DEBUG] Calling detector.isPullbackComplete() for BUY`);
   const buyResult = detector.isPullbackComplete(buyCandles, engulfingLevel, "BUY", rsi);
-  
+
   if (buyResult) {
     console.log("✓ BUY pullback detected");
     console.log(`  Pattern: ${buyResult.pattern}`);
@@ -36,21 +41,28 @@ function testPullbackDetector() {
     console.log("✗ No BUY pullback detected (expected to detect)");
   }
 
+  separator();
+
   // Test 2: Price touches but RSI extreme (should fail)
-  console.log("\nTest 2: Price touches but RSI too high");
-  
+  console.log("Test 2: Price touches but RSI too high");
+  separator();
+
   const extremeRSI = 70;
+  console.log(`[DEBUG] Calling detector.isPullbackComplete() with RSI=${extremeRSI}`);
   const result2 = detector.isPullbackComplete(buyCandles, engulfingLevel, "BUY", extremeRSI);
-  
+
   if (result2) {
     console.log("✗ Pullback detected (should reject - RSI extreme)");
   } else {
     console.log("✓ Correctly rejected (RSI too high)");
   }
 
+  separator();
+
   // Test 3: Valid SELL pullback
-  console.log("\nTest 3: Valid SELL pullback");
-  
+  console.log("Test 3: Valid SELL pullback");
+  separator();
+
   const sellCandles = [
     // Price coming up to engulfing level (1.0950)
     { timestamp: '2024-01-11T00:00:00Z', open: 1.0900, high: 1.0910, low: 1.0890, close: 1.0905 },
@@ -67,8 +79,9 @@ function testPullbackDetector() {
   const sellEngulfingLevel = 1.0950;
   const sellRsi = 45;
 
+  console.log(`[DEBUG] Calling detector.isPullbackComplete() for SELL`);
   const sellResult = detector.isPullbackComplete(sellCandles, sellEngulfingLevel, "SELL", sellRsi);
-  
+
   if (sellResult) {
     console.log("✓ SELL pullback detected");
     console.log(`  Pattern: ${sellResult.pattern}`);
@@ -78,9 +91,12 @@ function testPullbackDetector() {
     console.log("✗ No SELL pullback detected (expected to detect)");
   }
 
+  separator();
+
   // Test 4: Price never touches level
-  console.log("\nTest 4: Price doesn't reach level");
-  
+  console.log("Test 4: Price doesn't reach level");
+  separator();
+
   const noTouchCandles = [
     ...Array(10).fill(null).map((_, i) => ({
       timestamp: new Date(Date.parse('2024-01-12T00:00:00Z') + i * 60 * 60 * 1000).toISOString(),
@@ -91,8 +107,9 @@ function testPullbackDetector() {
     }))
   ];
 
+  console.log(`[DEBUG] Calling detector.isPullbackComplete() for no-touch scenario`);
   const result4 = detector.isPullbackComplete(noTouchCandles, 1.0850, "BUY", 50);
-  
+
   if (result4) {
     console.log("✗ Pullback detected (should reject - no touch)");
   } else {
