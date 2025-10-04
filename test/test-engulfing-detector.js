@@ -18,13 +18,13 @@ function testEngulfingDetector() {
     })),
     // Swing high at index 25
     { timestamp: '2024-01-05T00:00:00Z', open: 1.088, high: 1.095, low: 1.088, close: 1.094 },
-    // Pull back
+    // Pull back - start BELOW the swing high
     ...Array(20).fill(null).map((_, i) => ({
       timestamp: new Date(Date.parse('2024-01-05T04:00:00Z') + i * 4 * 60 * 60 * 1000).toISOString(),
-      open: 1.094 - (i * 0.0003),
-      high: 1.095 - (i * 0.0003),
-      low: 1.092 - (i * 0.0003),
-      close: 1.093 - (i * 0.0003)
+      open: 1.092 - (i * 0.0003),    // CHANGED: start at 1.092 not 1.094
+      high: 1.093 - (i * 0.0003),    // CHANGED: start at 1.093 not 1.095
+      low: 1.090 - (i * 0.0003),
+      close: 1.091 - (i * 0.0003)
     })),
     // Engulfing formation
     { timestamp: '2024-01-08T20:00:00Z', open: 1.086, high: 1.087, low: 1.083, close: 1.084 }, // Bearish
