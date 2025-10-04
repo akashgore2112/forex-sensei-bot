@@ -5,7 +5,7 @@ const path = require('path');
 
 class IntradayDataFetcher {
   constructor() {
-    this.apiKey = process.env.ALPHA_VANTAGE_API_KEY || 'demo';
+    this.apiKey = 'YOUR_REAL_API_KEY';
     this.cacheDir = path.join(__dirname, '../cache');
 
     if (!fs.existsSync(this.cacheDir)) {
