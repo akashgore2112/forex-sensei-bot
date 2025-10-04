@@ -35,6 +35,17 @@ function testEngulfingDetector() {
     adx: Array(candles1.length).fill(25) // ADX > 20
   };
 
+  // 🔍 DEBUGGING SECTION ADDED HERE
+  console.log(`Total candles: ${candles1.length}`);
+  console.log(`Candle at index 25: high=${candles1[25].high}`);
+  console.log(`Last candle (engulfing): close=${candles1[candles1.length - 1].close}`);
+  
+  const SwingDetector = require('../trading-patterns/swing-detector');
+  const swingDetector = new SwingDetector(20);
+  const testSwingHigh = swingDetector.getLatestSwingHigh(candles1.slice(0, -1));
+  console.log(`Latest swing high found: ${testSwingHigh ? testSwingHigh.price.toFixed(5) + ' at index ' + testSwingHigh.index : 'NONE'}`);
+  // 🔍 END DEBUGGING SECTION
+
   const detector = new EngulfingDetector();
   const result1 = detector.detect(candles1, indicators1);
   
