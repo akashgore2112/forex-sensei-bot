@@ -15,13 +15,12 @@ class TradeSimulator {
     const takeProfit = signal.exits.takeProfit;
     const direction = signal.direction;
 
-    // CRITICAL: Check if we have future candles
     if (!futureCandles || futureCandles.length === 0) {
       console.log(`⚠️ Skipping trade #${this.tradeCount} - no future candles available`);
       return null;
     }
 
-    // SANITY CHECK: Verify SL/TP aren't inverted
+    // Sanity check SL/TP
     if (direction === "BUY") {
       if (stopLoss >= entry) {
         console.log(`❌ ERROR TRADE #${this.tradeCount}: BUY has SL (${stopLoss.toFixed(5)}) >= entry (${entry.toFixed(5)})`);
@@ -97,8 +96,8 @@ class TradeSimulator {
       pips: Number(((exitPrice - entry) * (direction === "BUY" ? 10000 : -10000)).toFixed(1)),
       profitLoss: Number(profitLoss.toFixed(2)),
       balanceAfter: Number(this.balance.toFixed(2)),
-      riskReward: rr,
-      quality: signal.quality.grade
+      riskReward: rr
+      // REMOVED: quality field (doesn't exist in MTF system)
     };
   }
 
