@@ -1,111 +1,94 @@
 // backtesting/intraday-data-fetcher.js
-const axios = require('axios');
-const fs = require('fs');
-const path = require('path');
+const axios = require("axios");
+const fs = require("fs");
+const path = require("path");
 
 class IntradayDataFetcher {
   constructor() {
-    this.apiKey = 'YOUR_REAL_API_KEY';
-    this.cacheDir = path.join(__dirname, '../cache');
+    this.apiKey = "b5a7ca32025f4166a6c2e5381d64b242"; // TwelveData API Key
+    this.baseUrl = "https://api.twelvedata.com/time_series";
+    this.cacheDir = path.join(__dirname, "../cache");
 
     if (!fs.existsSync(this.cacheDir)) {
       fs.mkdirSync(this.cacheDir, { recursive: true });
     }
   }
 
-  // 🔹 Fetch 1H data directly from Alpha Vantage
-  async fetch1HData(symbol = "EUR/USD") {
-    const cacheFile = path.join(this.cacheDir, `${symbol.replace('/', '_')}_1H.json`);
+  // ✅ Generic fetch function
+  async fetchData(symbol = "EUR/USD", interval = "1h", months = 6) {
+    const cacheFile = path.join(this.cacheDir, `${symbol.replace("/", "_")}_${interval}.json`);
 
-    // ✅ Use cache if recent
+    // Use cache if available and fresh (< 24h)
     if (fs.existsSync(cacheFile)) {
-      const cached = JSON.parse(fs.readFileSync(cacheFile, 'utf8'));
+      const cached = JSON.parse(fs.readFileSync(cacheFile, "utf8"));
       const cacheAge = Date.now() - new Date(cached.fetchedAt).getTime();
+
       if (cacheAge < 24 * 60 * 60 * 1000) {
-        console.log(`Using cached 1H data (${cached.data.length} candles)`);
+        console.log(`✅ Using cached ${interval} data (${cached.data.length} candles)`);
         return cached.data;
       }
     }
 
-    console.log(`Fetching 1H data for ${symbol}...`);
+    console.log(`📡 Fetching ${interval} data for ${symbol} from TwelveData...`);
 
-    const [fromCurrency, toCurrency] = symbol.split('/');
-    const url = `https://www.alphavantage.co/query?function=FX_INTRADAY&from_symbol=${fromCurrency}&to_symbol=${toCurrency}&interval=60min&outputsize=full&apikey=${this.apiKey}`;
+    try {
+      const url = `${this.baseUrl}?symbol=${symbol.replace("/", "/")}&interval=${interval}&apikey=${this.apiKey}&outputsize=5000&format=JSON`;
+      const response = await axios.get(url);
 
-    const response = await axios.get(url);
+      if (response.data.status === "error") {
+        throw new Error(`TwelveData Error: ${response.data.message}`);
+      }
 
-    if (response.data['Error Message']) {
-      throw new Error(`Alpha Vantage error: ${response.data['Error Message']}`);
+      if (!response.data.values) {
+        throw new Error(`No ${interval} data returned for ${symbol}`);
+      }
+
+      const candles = response.data.values
+        .map((item) => ({
+          timestamp: new Date(item.datetime).toISOString(),
+          open: parseFloat(item.open),
+          high: parseFloat(item.high),
+          low: parseFloat(item.low),
+          close: parseFloat(item.close),
+          volume: item.volume ? parseFloat(item.volume) : 0,
+        }))
+        .sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp));
+
+      // Cache result
+      fs.writeFileSync(
+        cacheFile,
+        JSON.stringify(
+          {
+            symbol,
+            interval,
+            fetchedAt: new Date().toISOString(),
+            data: candles,
+          },
+          null,
+          2
+        )
+      );
+
+      console.log(`✅ Saved ${candles.length} ${interval} candles to cache`);
+      return candles;
+    } catch (err) {
+      console.error(`❌ Error fetching ${interval} data: ${err.message}`);
+      if (fs.existsSync(cacheFile)) {
+        console.log("⚠️ Using older cached data due to fetch failure.");
+        return JSON.parse(fs.readFileSync(cacheFile, "utf8")).data;
+      }
+      throw err;
     }
-
-    if (response.data['Note']) {
-      throw new Error('API rate limit reached. Wait 1 minute.');
-    }
-
-    const timeSeries = response.data['Time Series FX (60min)'];
-    if (!timeSeries) {
-      throw new Error('No 1H data returned');
-    }
-
-    const candles = Object.entries(timeSeries)
-      .map(([timestamp, values]) => ({
-        timestamp: new Date(timestamp).toISOString(),
-        open: parseFloat(values['1. open']),
-        high: parseFloat(values['2. high']),
-        low: parseFloat(values['3. low']),
-        close: parseFloat(values['4. close']),
-        volume: 0,
-      }))
-      .sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp));
-
-    fs.writeFileSync(
-      cacheFile,
-      JSON.stringify({ symbol, interval: '1H', fetchedAt: new Date().toISOString(), data: candles }, null, 2)
-    );
-
-    console.log(`Fetched ${candles.length} 1H candles`);
-    return candles;
   }
 
-  // 🔹 Aggregate 1H data to 4H candles
-  async fetch4HData(symbol = "EUR/USD") {
-    const cacheFile = path.join(this.cacheDir, `${symbol.replace('/', '_')}_4H.json`);
+  // ✅ Fetch 4H data
+  async fetch4HData(symbol = "EUR/USD", months = 6) {
+    return this.fetchData(symbol, "4h", months);
+  }
 
-    // ✅ Use cache if available
-    if (fs.existsSync(cacheFile)) {
-      const cached = JSON.parse(fs.readFileSync(cacheFile, 'utf8'));
-      const cacheAge = Date.now() - new Date(cached.fetchedAt).getTime();
-      if (cacheAge < 24 * 60 * 60 * 1000) {
-        console.log(`Using cached 4H data (${cached.data.length} candles)`);
-        return cached.data;
-      }
-    }
-
-    console.log("Generating 4H data from 1H candles...");
-
-    const oneHData = await this.fetch1HData(symbol);
-
-    const fourH = [];
-    for (let i = 0; i < oneHData.length; i += 4) {
-      const group = oneHData.slice(i, i + 4);
-      if (group.length < 4) continue;
-
-      const open = group[0].open;
-      const close = group[group.length - 1].close;
-      const high = Math.max(...group.map(c => c.high));
-      const low = Math.min(...group.map(c => c.low));
-      const timestamp = group[group.length - 1].timestamp;
-
-      fourH.push({ timestamp, open, high, low, close, volume: 0 });
-    }
-
-    fs.writeFileSync(
-      cacheFile,
-      JSON.stringify({ symbol, interval: '4H', fetchedAt: new Date().toISOString(), data: fourH }, null, 2)
-    );
-
-    console.log(`Generated ${fourH.length} 4H candles`);
-    return fourH;
+  // ✅ Fetch 1H data
+  async fetch1HData(symbol = "EUR/USD", months = 6) {
+    return this.fetchData(symbol, "1h", months);
   }
 }
 
