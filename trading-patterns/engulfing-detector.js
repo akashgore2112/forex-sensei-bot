@@ -10,36 +10,62 @@ class EngulfingDetector {
    * Detect bullish engulfing on 4H that closes beyond swing high
    */
   detectBullishEngulfing(candles, indicators) {
-    if (candles.length < 50) return null;
+    if (candles.length < 50) {
+      console.log("  [DEBUG] Not enough candles");
+      return null;
+    }
 
     const current = candles[candles.length - 1];
     const previous = candles[candles.length - 2];
     const adx = indicators.adx[indicators.adx.length - 1];
 
-    // Rule 1: Previous candle bearish
-    if (previous.close >= previous.open) return null;
+    console.log(`  [DEBUG] Previous: open=${previous.open} close=${previous.close} (bearish=${previous.close < previous.open})`);
+    console.log(`  [DEBUG] Current: open=${current.open} close=${current.close} (bullish=${current.close > current.open})`);
 
-    // Rule 2: Current candle bullish
-    if (current.close <= current.open) return null;
+    if (previous.close >= previous.open) {
+      console.log("  [DEBUG] Failed: Previous not bearish");
+      return null;
+    }
 
-    // Rule 3: Current body engulfs previous body
-    const currentBodyEngulfs = 
-      current.open < previous.close && 
+    if (current.close <= current.open) {
+      console.log("  [DEBUG] Failed: Current not bullish");
+      return null;
+    }
+
+    const currentBodyEngulfs =
+      current.open < previous.close &&
       current.close > previous.open;
 
-    if (!currentBodyEngulfs) return null;
+    console.log(`  [DEBUG] Engulfs check: ${current.open} < ${previous.close} AND ${current.close} > ${previous.open} = ${currentBodyEngulfs}`);
 
-    // Rule 4: ADX > 20 (trend strength)
-    if (adx <= 20) return null;
+    if (!currentBodyEngulfs) {
+      console.log("  [DEBUG] Failed: Body doesn't engulf");
+      return null;
+    }
 
-    // Rule 5: Current close > latest swing high
+    console.log(`  [DEBUG] ADX: ${adx}`);
+    if (adx <= 20) {
+      console.log("  [DEBUG] Failed: ADX too low");
+      return null;
+    }
+
     const latestSwingHigh = this.swingDetector.getLatestSwingHigh(candles.slice(0, -1));
-    
-    if (!latestSwingHigh) return null;
-    
-    if (current.close <= latestSwingHigh.price) return null;
 
-    // All conditions met
+    console.log(`  [DEBUG] Swing high: ${latestSwingHigh ? latestSwingHigh.price : 'NONE'}`);
+
+    if (!latestSwingHigh) {
+      console.log("  [DEBUG] Failed: No swing high found");
+      return null;
+    }
+
+    console.log(`  [DEBUG] Close vs swing: ${current.close} > ${latestSwingHigh.price} = ${current.close > latestSwingHigh.price}`);
+
+    if (current.close <= latestSwingHigh.price) {
+      console.log("  [DEBUG] Failed: Doesn't break swing");
+      return null;
+    }
+
+    console.log("  [DEBUG] All checks passed!");
     return {
       type: 'BULLISH_ENGULFING',
       direction: 'BUY',
@@ -60,36 +86,61 @@ class EngulfingDetector {
    * Detect bearish engulfing on 4H that closes beyond swing low
    */
   detectBearishEngulfing(candles, indicators) {
-    if (candles.length < 50) return null;
+    if (candles.length < 50) {
+      console.log("  [DEBUG] Not enough candles");
+      return null;
+    }
 
     const current = candles[candles.length - 1];
     const previous = candles[candles.length - 2];
     const adx = indicators.adx[indicators.adx.length - 1];
 
-    // Rule 1: Previous candle bullish
-    if (previous.close <= previous.open) return null;
+    console.log(`  [DEBUG] Previous: open=${previous.open} close=${previous.close} (bullish=${previous.close > previous.open})`);
+    console.log(`  [DEBUG] Current: open=${current.open} close=${current.close} (bearish=${current.close < current.open})`);
 
-    // Rule 2: Current candle bearish
-    if (current.close >= current.open) return null;
+    if (previous.close <= previous.open) {
+      console.log("  [DEBUG] Failed: Previous not bullish");
+      return null;
+    }
 
-    // Rule 3: Current body engulfs previous body
-    const currentBodyEngulfs = 
-      current.open > previous.close && 
+    if (current.close >= current.open) {
+      console.log("  [DEBUG] Failed: Current not bearish");
+      return null;
+    }
+
+    const currentBodyEngulfs =
+      current.open > previous.close &&
       current.close < previous.open;
 
-    if (!currentBodyEngulfs) return null;
+    console.log(`  [DEBUG] Engulfs check: ${current.open} > ${previous.close} AND ${current.close} < ${previous.open} = ${currentBodyEngulfs}`);
 
-    // Rule 4: ADX > 20
-    if (adx <= 20) return null;
+    if (!currentBodyEngulfs) {
+      console.log("  [DEBUG] Failed: Body doesn't engulf");
+      return null;
+    }
 
-    // Rule 5: Current close < latest swing low
+    console.log(`  [DEBUG] ADX: ${adx}`);
+    if (adx <= 20) {
+      console.log("  [DEBUG] Failed: ADX too low");
+      return null;
+    }
+
     const latestSwingLow = this.swingDetector.getLatestSwingLow(candles.slice(0, -1));
-    
-    if (!latestSwingLow) return null;
-    
-    if (current.close >= latestSwingLow.price) return null;
+    console.log(`  [DEBUG] Swing low: ${latestSwingLow ? latestSwingLow.price : 'NONE'}`);
 
-    // All conditions met
+    if (!latestSwingLow) {
+      console.log("  [DEBUG] Failed: No swing low found");
+      return null;
+    }
+
+    console.log(`  [DEBUG] Close vs swing: ${current.close} < ${latestSwingLow.price} = ${current.close < latestSwingLow.price}`);
+
+    if (current.close >= latestSwingLow.price) {
+      console.log("  [DEBUG] Failed: Doesn't break swing");
+      return null;
+    }
+
+    console.log("  [DEBUG] All checks passed!");
     return {
       type: 'BEARISH_ENGULFING',
       direction: 'SELL',
