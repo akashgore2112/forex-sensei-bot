@@ -26,10 +26,12 @@ function testEngulfingDetector() {
       low: 1.090 - (i * 0.0003),
       close: 1.091 - (i * 0.0003)
     })),
-    // Engulfing formation
-    { timestamp: '2024-01-08T20:00:00Z', open: 1.086, high: 1.087, low: 1.083, close: 1.084 }, // Bearish
-    { timestamp: '2024-01-09T00:00:00Z', open: 1.083, high: 1.097, low: 1.082, close: 1.096 }  // Bullish engulfing, breaks swing high
-  ];
+    // Engulfing formation (add 2 filler candles first)
+   { timestamp: '2024-01-08T16:00:00Z', open: 1.087, high: 1.088, low: 1.086, close: 1.087 }, // Filler 1
+   { timestamp: '2024-01-08T20:00:00Z', open: 1.087, high: 1.088, low: 1.085, close: 1.086 }, // Filler 2
+   { timestamp: '2024-01-09T00:00:00Z', open: 1.086, high: 1.087, low: 1.083, close: 1.084 }, // Bearish
+   { timestamp: '2024-01-09T04:00:00Z', open: 1.083, high: 1.097, low: 1.082, close: 1.096 }  // Bullish engulfing
+   ];
 
   const indicators1 = {
     adx: Array(candles1.length).fill(25) // ADX > 20
