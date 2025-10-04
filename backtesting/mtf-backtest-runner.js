@@ -34,43 +34,33 @@ class MTFBacktestRunner {
     let setupCount = 0;
     let entryCount = 0;
 
-    // Iterate through each 1H candle (starting from index 100 to have enough lookback)
     for (let i = 100; i < oneH.length; i++) {
       const currentTimestamp = oneH[i].timestamp;
-      
-      // Get aligned data up to this point
       const alignedData = this.getAlignedData(daily, fourH, oneH, i);
       
       if (!alignedData.daily || alignedData.fourH.length < 50 || alignedData.oneH.length < 10) {
         continue;
       }
 
-      // Calculate indicators for all timeframes
       const indicators = this.calculateIndicators(alignedData);
-
-      // Run MTF scan
       const result = this.orchestrator.scanForSetup(alignedData, indicators);
 
-      // Log daily bias changes
       if (result.dailyBias.bias !== lastDailyBias) {
         this.logDailyBiasChange(currentTimestamp, lastDailyBias, result.dailyBias.bias);
         lastDailyBias = result.dailyBias.bias;
       }
 
-      // Log 4H setup formation
       if (result.setup4H?.detected && !this.isSetupLogged(result.setup4H.timestamp)) {
         setupCount++;
         this.log4HSetup(setupCount, result.setup4H);
       }
 
-      // Execute trade if entry ready
       if (result.ready && result.entry1H?.entryReady) {
         entryCount++;
         this.executeEntry(entryCount, result, oneH, i);
       }
     }
 
-    // Generate summary
     this.generateSummary();
     
     return {
@@ -84,18 +74,15 @@ class MTFBacktestRunner {
     const currentTimestamp = oneH[currentIndex].timestamp;
     const currentTime = new Date(currentTimestamp).getTime();
 
-    // Get daily candle for current date
     const currentDaily = daily.find(d => {
       const dDate = new Date(d.timestamp);
       const cDate = new Date(currentTimestamp);
       return dDate.toISOString().split('T')[0] === cDate.toISOString().split('T')[0];
     });
 
-    // Get last 50 4H candles up to current time
     const fourHFiltered = fourH.filter(c => new Date(c.timestamp).getTime() <= currentTime);
     const fourHSlice = fourHFiltered.slice(-50);
 
-    // Get last 100 1H candles up to current index
     const oneHSlice = oneH.slice(Math.max(0, currentIndex - 99), currentIndex + 1);
 
     return {
@@ -146,9 +133,10 @@ class MTFBacktestRunner {
     console.log(`ADX: ${setup.adx.toFixed(1)}`);
   }
 
+  // ✅ Updated function as per your request
   executeEntry(count, result, oneHCandles, currentIndex) {
     const entry = result.entry1H;
-    
+
     this.setupLog.oneHEntries.push({
       number: count,
       timestamp: entry.timestamp,
@@ -167,20 +155,22 @@ class MTFBacktestRunner {
     console.log(`TP: ${entry.takeProfit}`);
     console.log(`R:R: ${entry.riskReward}:1`);
 
-    // Simulate trade execution
-    const futureCandles = oneHCandles.slice(currentIndex + 1, currentIndex + 101); // Next 100 candles
-    
-    const tradeResult = this.tradeSimulator.executeTrade(
-      {
-        id: count,
-        direction: entry.direction,
-        entry: { price: entry.entry },
-        exits: {
-          stopLoss: entry.stopLoss,
-          takeProfit: entry.takeProfit
-        },
-        risk: { riskReward: entry.riskReward }
+    const futureCandles = oneHCandles.slice(currentIndex + 1, currentIndex + 101);
+
+    // ✅ Updated signal structure
+    const tradeSignal = {
+      id: count,
+      direction: entry.direction,
+      entry: { price: entry.entry },
+      exits: {
+        stopLoss: entry.stopLoss,
+        takeProfit: entry.takeProfit
       },
+      risk: { riskReward: entry.riskReward }
+    };
+
+    const tradeResult = this.tradeSimulator.executeTrade(
+      tradeSignal,
       oneHCandles[currentIndex],
       futureCandles
     );
