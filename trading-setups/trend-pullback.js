@@ -8,43 +8,29 @@ class TrendPullbackSetup {
     if (candles.length < 50) return null;
 
     const latest = candles[candles.length - 1];
-    const prev = candles[candles.length - 2];
-    
     const ema20 = indicators.ema20[indicators.ema20.length - 1];
     const ema50 = indicators.ema50[indicators.ema50.length - 1];
     const rsi = indicators.rsi14[indicators.rsi14.length - 1];
     const atr = indicators.atr[indicators.atr.length - 1];
 
-    // Rule 1: MTFA aligned (all 3 timeframes same bias)
-    const mtfaAligned = 
-      mtfa.biases.daily === mtfa.biases.weekly && 
-      mtfa.biases.weekly === mtfa.biases.monthly &&
-      mtfa.overallBias !== "NEUTRAL";
+    // Rule checks with logging
+    const checks = {
+      mtfaAligned: mtfa.biases.daily === mtfa.biases.weekly && 
+                   mtfa.biases.weekly === mtfa.biases.monthly &&
+                   mtfa.overallBias !== "NEUTRAL",
+      
+      nearEMA20: Math.abs(latest.close - ema20) / ema20 < 0.0015,
+      
+      rsiNeutral: rsi > 40 && rsi < 60,
+      
+      trendConfirmed: (mtfa.overallBias === "BULLISH" && ema20 > ema50) ||
+                      (mtfa.overallBias === "BEARISH" && ema20 < ema50)
+    };
 
-    if (!mtfaAligned) return null;
+    // If any check fails, return null
+    if (!Object.values(checks).every(v => v)) return null;
 
-    // Rule 2: Price near EMA20 (within 0.15%)
-    const distanceToEMA20 = Math.abs(latest.close - ema20) / ema20;
-    const nearEMA20 = distanceToEMA20 < 0.0015;
-
-    if (!nearEMA20) return null;
-
-    // Rule 3: RSI between 40-60 (not extreme)
-    const rsiNeutral = rsi > 40 && rsi < 60;
-
-    if (!rsiNeutral) return null;
-
-    // Rule 4: EMA20 above EMA50 for bullish, below for bearish
-    const trendConfirmed = 
-      (mtfa.overallBias === "BULLISH" && ema20 > ema50) ||
-      (mtfa.overallBias === "BEARISH" && ema20 < ema50);
-
-    if (!trendConfirmed) return null;
-
-    // Calculate entry, SL, TP
     const direction = mtfa.overallBias === "BULLISH" ? "BUY" : "SELL";
-    
-    // Find recent swing point for SL
     const swingLow = this.findRecentSwingLow(candles, 20);
     const swingHigh = this.findRecentSwingHigh(candles, 20);
     
@@ -52,16 +38,18 @@ class TrendPullbackSetup {
     
     if (direction === "BUY") {
       entry = latest.close;
-      stopLoss = swingLow - atr * 0.5; // Below swing low
+      stopLoss = swingLow - atr * 0.5;
       const risk = entry - stopLoss;
-      takeProfit = entry + risk * 2; // 2:1 R:R
+      takeProfit = entry + risk * 2.0;
     } else {
       entry = latest.close;
-      stopLoss = swingHigh + atr * 0.5; // Above swing high
+      stopLoss = swingHigh + atr * 0.5;
       const risk = stopLoss - entry;
-      takeProfit = entry - risk * 2; // 2:1 R:R
+      takeProfit = entry - risk * 2.0;
     }
 
+    const distancePct = ((latest.close - ema20) / ema20 * 100).toFixed(2);
+    
     return {
       type: this.name,
       direction,
@@ -70,8 +58,9 @@ class TrendPullbackSetup {
       takeProfit,
       riskReward: 2.0,
       confidence: 0.65,
-      reason: `MTFA aligned ${direction}, pullback to EMA20, RSI neutral`,
-      timestamp: latest.timestamp
+      reason: `${direction}: MTFA=${mtfa.overallBias}, Price ${distancePct}% from EMA20, RSI=${rsi.toFixed(1)}, ATR=${(atr*10000).toFixed(1)}pips`,
+      timestamp: latest.timestamp,
+      indicators: { ema20, ema50, rsi, atr, price: latest.close }
     };
   }
 
