@@ -34,20 +34,36 @@ class PullbackDetector {
    * - Recent candle closes bullish (close > open)
    */
   detectHigherLow(candles, lookback = 5) {
-    if (candles.length < lookback + 1) return null;
-    
+    if (candles.length < lookback + 1) {
+      console.log("  [DEBUG] Not enough candles for higher low detection");
+      return null;
+    }
+
     const recent = candles.slice(-lookback);
-    
+    console.log(`  [DEBUG] Checking last ${lookback} candles for higher low`);
+
     for (let i = 1; i < recent.length; i++) {
       const current = recent[i];
       const previous = recent[i - 1];
-      
+
+      console.log(`  [DEBUG] Candle ${i}: curr_low=${current.low.toFixed(5)}, prev_low=${previous.low.toFixed(5)}, curr_close=${current.close.toFixed(5)}, curr_open=${current.open.toFixed(5)}`);
+
       // Check: current low > previous low
-      if (current.low <= previous.low) continue;
-      
+      if (current.low <= previous.low) {
+        console.log(`    ✗ Low not higher`);
+        continue;
+      }
+
+      console.log(`    ✓ Low is higher`);
+
       // Check: current candle bullish
-      if (current.close <= current.open) continue;
-      
+      if (current.close <= current.open) {
+        console.log(`    ✗ Candle not bullish`);
+        continue;
+      }
+
+      console.log(`    ✓ Candle is bullish - FOUND HIGHER LOW`);
+
       // Found higher low
       return {
         found: true,
@@ -57,7 +73,8 @@ class PullbackDetector {
         reason: `Higher low: ${current.low.toFixed(5)} > ${previous.low.toFixed(5)}`
       };
     }
-    
+
+    console.log("  [DEBUG] No higher low found in lookback");
     return null;
   }
 
