@@ -15,19 +15,28 @@ class TradeSimulator {
     const takeProfit = signal.exits.takeProfit;
     const direction = signal.direction;
 
-    // DEBUG: Log first 3 trades in detail
-    if (this.tradeCount <= 3) {
-      console.log(`\n🔍 TRADE #${this.tradeCount} DEBUG:`);
-      console.log(`   Direction: ${direction}`);
-      console.log(`   Entry Price: ${entry?.toFixed?.(5) || entry}`);
-      console.log(`   StopLoss: ${stopLoss?.toFixed?.(5) || stopLoss}`);
-      console.log(`   TakeProfit: ${takeProfit?.toFixed?.(5) || takeProfit}`);
-      console.log(`   Entry Candle Close: ${entryCandle.close?.toFixed?.(5)}`);
-      if (futureCandles[0]) {
-        console.log(
-          `   Next Candle: High=${futureCandles[0].high?.toFixed?.(5)} Low=${futureCandles[0].low?.toFixed?.(5)}`
-        );
+    // SANITY CHECK: Verify SL/TP aren't inverted
+    if (direction === "BUY") {
+      if (stopLoss >= entry) {
+        console.log(`❌ ERROR TRADE #${this.tradeCount}: BUY has SL (${stopLoss.toFixed(5)}) >= entry (${entry.toFixed(5)})`);
       }
+      if (takeProfit <= entry) {
+        console.log(`❌ ERROR TRADE #${this.tradeCount}: BUY has TP (${takeProfit.toFixed(5)}) <= entry (${entry.toFixed(5)})`);
+      }
+    } else if (direction === "SELL") {
+      if (stopLoss <= entry) {
+        console.log(`❌ ERROR TRADE #${this.tradeCount}: SELL has SL (${stopLoss.toFixed(5)}) <= entry (${entry.toFixed(5)})`);
+      }
+      if (takeProfit >= entry) {
+        console.log(`❌ ERROR TRADE #${this.tradeCount}: SELL has TP (${takeProfit.toFixed(5)}) >= entry (${entry.toFixed(5)})`);
+      }
+    }
+
+    // DEBUG: Log first 3 trades
+    if (this.tradeCount <= 3) {
+      console.log(`\nTRADE #${this.tradeCount}: ${direction}`);
+      console.log(`  Entry: ${entry.toFixed(5)} | SL: ${stopLoss.toFixed(5)} | TP: ${takeProfit.toFixed(5)}`);
+      console.log(`  Current: ${entryCandle.close.toFixed(5)}`);
     }
 
     let outcome = "PENDING";
@@ -76,11 +85,8 @@ class TradeSimulator {
 
     this.balance += profitLoss;
 
-    // DEBUG: Log outcome of first 3 trades
     if (this.tradeCount <= 3) {
-      console.log(`   Outcome: ${outcome}`);
-      console.log(`   Exit Price: ${exitPrice?.toFixed?.(5) || exitPrice}`);
-      console.log(`   Balance After Trade: ${this.balance.toFixed(2)}\n`);
+      console.log(`  Outcome: ${outcome} | Exit: ${exitPrice.toFixed(5)}`);
     }
 
     return {
