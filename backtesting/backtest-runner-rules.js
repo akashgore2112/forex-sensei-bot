@@ -80,9 +80,13 @@ class RuleBasedBacktestRunner {
           historicalCandles.slice(i + 1, i + 20)
         );
 
-        console.log(`Result: ${trade.outcome} | P/L: $${trade.profitLoss}`);
-        
-        trades.push({ ...trade, setupType: setup.type, setupReason: setup.reason });
+        // ✅ Filter out invalid/null trades
+        if (trade) {
+          console.log(`Result: ${trade.outcome} | P/L: $${trade.profitLoss}`);
+          trades.push({ ...trade, setupType: setup.type, setupReason: setup.reason });
+        } else {
+          console.log(`Skipped - insufficient future data`);
+        }
       }
 
       if (i % 50 === 0) {
