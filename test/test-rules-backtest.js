@@ -17,7 +17,10 @@ async function runRulesBacktest() {
   const trades = await runner.runBacktest(data);
 
   const reporter = new BacktestReporter();
-  reporter.generateReport(trades, 10000);
+  const report = reporter.generateReport(trades, 10000);
+  
+  // Export to JSON
+  reporter.exportJSON(report, "phase1-results.json");
 }
 
 runRulesBacktest().catch(console.error);
