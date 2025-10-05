@@ -5,7 +5,7 @@ const SwingDetector = require('../trading-patterns/swing-detector');
 class OneHourEntryScanner {  
   constructor() {  
     this.pullbackDetector = new PullbackDetector();  
-    this.swingDetector = new SwingDetector(5); // 5 candle lookback for 1H swings  
+    this.swingDetector = new SwingDetector(10); // 5 candle lookback for 1H swings  
   }  
   
   /**  
