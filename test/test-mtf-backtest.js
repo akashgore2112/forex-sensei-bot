@@ -73,7 +73,7 @@ async function runFullBacktest() {
       console.log(stats.message);
     } else {
       console.log(`\nTotal Trades: ${stats.totalTrades}`);
-      console.log(`Wins: ${stats.wins} | Losses: ${stats.losses} | Timeouts: ${stats.timeouts}`);
+      console.log(`Wins: ${stats.wins} | Losses: ${stats.losses}`);
       console.log(`Win Rate: ${stats.winRate}%`);
       console.log(`\nStarting Balance: $10,000`);
       console.log(`Final Balance: $${stats.finalBalance}`);
