@@ -140,9 +140,9 @@ class PinBarDetectorStrict {
       return distance < Math.abs(candleExtreme - closest.price) ? swing : closest;
     });
 
-    // Distance check: within 0.15% (stricter from 0.3%)
+    // Distance check: within 0.5% (stricter from 0.3%)
     const distance = Math.abs(candleExtreme - closestSwing.price) / closestSwing.price;
-    if (distance > 0.0015) {
+    if (distance > 0.005) {
       return { 
         valid: false, 
         reason: `Too far from swing (${(distance * 100).toFixed(2)}% > 0.15%)`,
